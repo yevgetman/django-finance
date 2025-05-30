@@ -109,6 +109,39 @@ Focus on actionable, specific recommendations with clear rationale.
         temperature=0.8
     )
     
+    # Portfolio Recommendations Prompt (for actionable steps)
+    PORTFOLIO_RECOMMENDATIONS = PromptTemplate(
+        system_message=(
+            "You are a professional financial advisor specializing in actionable portfolio recommendations. "
+            "Your task is to provide specific buy, sell, or hold recommendations for each asset in "
+            "the portfolio, plus suggestions for new investments to improve portfolio balance."
+        ),
+        user_template="""
+Based on the portfolio analysis below, provide specific actionable recommendations for each asset in this portfolio. 
+
+PORTFOLIO ANALYSIS:
+{analysis}
+
+PORTFOLIO DETAILS:
+{portfolio_summary}
+
+For EACH existing asset, provide ONE of these recommendations:
+- BUY MORE: Specify why and approximate percentage to increase
+- HOLD: Explain why the position is appropriate
+- REDUCE: Specify why and approximate percentage to decrease
+- SELL ALL: Explain why the asset should be eliminated
+
+ALSO provide 2-4 NEW INVESTMENT recommendations to improve portfolio balance, including:
+- Specific asset types or securities
+- Why they would improve the portfolio
+- Suggested allocation percentage
+
+Format recommendations in a clear, actionable list.
+        """.strip(),
+        max_tokens=1000,
+        temperature=0.7
+    )
+    
     @classmethod
     def get_prompt(cls, prompt_name: str) -> Optional[PromptTemplate]:
         """Get a prompt template by name."""
@@ -178,6 +211,41 @@ def get_portfolio_analysis_prompt(portfolio_data: list, total_value: float,
     
     return {
         'messages': prompt_template.get_messages(portfolio_summary=portfolio_summary),
+        'max_tokens': prompt_template.max_tokens,
+        'temperature': prompt_template.temperature
+    }
+
+
+def get_portfolio_recommendations_prompt(portfolio_data: list, total_value: float,
+                                      asset_count: int, asset_types: set, 
+                                      analysis: str) -> Dict[str, Any]:
+    """
+    Get formatted portfolio recommendations prompt with data injection.
+    
+    Args:
+        portfolio_data: List of portfolio assets
+        total_value: Total portfolio value
+        asset_count: Number of assets
+        asset_types: Set of asset types
+        analysis: Previous AI analysis of the portfolio
+    
+    Returns:
+        Dictionary containing messages, max_tokens, and temperature for OpenAI API
+    """
+    prompt_template = PromptManager.get_prompt('PORTFOLIO_RECOMMENDATIONS')
+    
+    if not prompt_template:
+        raise ValueError("Portfolio recommendations prompt not found")
+    
+    portfolio_summary = format_portfolio_summary(
+        portfolio_data, total_value, asset_count, asset_types
+    )
+    
+    return {
+        'messages': prompt_template.get_messages(
+            portfolio_summary=portfolio_summary,
+            analysis=analysis
+        ),
         'max_tokens': prompt_template.max_tokens,
         'temperature': prompt_template.temperature
     }

@@ -6,7 +6,7 @@ import yfinance as yf
 import concurrent.futures
 import os
 from openai import OpenAI
-from .prompts import get_portfolio_analysis_prompt
+from .prompts import get_portfolio_analysis_prompt, get_portfolio_recommendations_prompt
 
 def get_ticker_data(ticker):
     """Helper function to get data for a single ticker"""
@@ -137,29 +137,67 @@ def analyze_portfolio(request):
     asset_count = len(portfolio_data)
     asset_types = set(asset.get('type') for asset in portfolio_data if asset.get('type'))
     
-    # Generate AI-powered analysis using OpenAI
+    # Create OpenAI client
+    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+    ai_analysis = "Analysis unavailable"
+    ai_recommendations = []
+    
+    # Step 1: Generate AI-powered analysis using first model
     try:
-        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-        
-        # Get formatted prompt using prompt management system
-        prompt_config = get_portfolio_analysis_prompt(
+        # Get formatted prompt for portfolio analysis
+        analysis_prompt_config = get_portfolio_analysis_prompt(
             portfolio_data, 
             total_value, 
             asset_count, 
             asset_types
         )
         
-        response = client.chat.completions.create(
+        analysis_response = client.chat.completions.create(
             model=os.getenv('OPENAI_MODEL', 'gpt-4o'),
-            messages=prompt_config['messages'],
-            max_tokens=prompt_config['max_tokens'],
-            temperature=prompt_config['temperature']
+            messages=analysis_prompt_config['messages'],
+            max_tokens=analysis_prompt_config['max_tokens'],
+            temperature=analysis_prompt_config['temperature']
         )
         
-        ai_analysis = response.choices[0].message.content
+        ai_analysis = analysis_response.choices[0].message.content
         
     except Exception as e:
         ai_analysis = f"AI analysis temporarily unavailable: {str(e)}"
+    
+    # Step 2: Generate recommendations using second model
+    try:
+        # Only proceed if analysis was successful
+        if not ai_analysis.startswith("AI analysis temporarily unavailable"):
+            # Get formatted prompt for portfolio recommendations
+            recommendations_prompt_config = get_portfolio_recommendations_prompt(
+                portfolio_data, 
+                total_value, 
+                asset_count, 
+                asset_types,
+                analysis=ai_analysis
+            )
+            
+            recommendations_response = client.chat.completions.create(
+                model=os.getenv('OPENAI_RECOMMENDATIONS_MODEL', 'gpt-4o'),
+                messages=recommendations_prompt_config['messages'],
+                max_tokens=recommendations_prompt_config['max_tokens'],
+                temperature=recommendations_prompt_config['temperature']
+            )
+            
+            # Process recommendations response
+            recommendations_text = recommendations_response.choices[0].message.content
+            
+            # Extract recommendations into a list (split by line breaks and filter out empty lines)
+            ai_recommendations = [
+                line.strip() for line in recommendations_text.split('\n') 
+                if line.strip() and not line.strip().startswith('#') and not line.strip().startswith('ALSO')
+            ]
+            
+            # If splitting didn't work well, use the whole text
+            if not ai_recommendations:
+                ai_recommendations = [recommendations_text]
+    except Exception as e:
+        ai_recommendations = [f"Recommendations temporarily unavailable: {str(e)}"] 
     
     # Portfolio analysis response
     analysis = {
@@ -167,11 +205,7 @@ def analyze_portfolio(request):
         'asset_count': asset_count,
         'asset_types': list(asset_types),
         'analysis': ai_analysis,
-        'recommendations': [
-            'NOT SET',
-            'WILL BE SET IN THE FUTURE',
-            'THIS IS A PLACEHOLDER'
-        ]
+        'recommendations': ai_recommendations
     }
     
     return Response(analysis)
