@@ -114,7 +114,8 @@ Focus on actionable, specific recommendations with clear rationale.
         system_message=(
             "You are a professional financial advisor specializing in actionable portfolio recommendations. "
             "Your task is to provide specific buy, sell, or hold recommendations for each asset in "
-            "the portfolio, plus suggestions for new investments to improve portfolio balance."
+            "the portfolio, plus suggestions for new investments to improve portfolio balance. "
+            "Consider the user's available cash and investment goals when making recommendations."
         ),
         user_template="""
 Based on the portfolio analysis below, provide specific actionable recommendations for each asset in this portfolio.
@@ -141,9 +142,11 @@ IMPORTANT INSTRUCTIONS:
 4. For new investments, suggest SPECIFIC ticker symbols (not generic asset classes)
 5. Use ONLY these ACTION values: BUY, HOLD, or SELL
 6. Use ONLY these QUANTITY values: ALL (sell entire position), SOME (reduce position), MORE (increase position), or NEW (for new investments)
-7. Include a brief REASON limited to one sentence
+7. Include a brief REASON limited to one sentence that aligns with the user's investment goals when applicable
+8. When recommending NEW investments, ensure they align with the user's stated investment goals
+9. Take into account the user's available cash when suggesting purchases, and stay within those limits
 
-You MUST provide a recommendation for EACH existing asset in the portfolio, followed by 2-3 recommendations for NEW investments that would improve portfolio balance.
+You MUST provide a recommendation for EACH existing asset in the portfolio, followed by 2-3 recommendations for NEW investments that would improve portfolio balance and achieve the stated investment goals.
         """.strip(),
         max_tokens=1000,
         temperature=0.7
@@ -164,7 +167,8 @@ You MUST provide a recommendation for EACH existing asset in the portfolio, foll
 
 
 def format_portfolio_summary(portfolio_data: list, total_value: float, 
-                           asset_count: int, asset_types: set) -> str:
+                           asset_count: int, asset_types: set,
+                           cash: float = 0, investment_goals: str = '') -> str:
     """
     Format portfolio data into a structured summary for AI analysis.
     
@@ -173,15 +177,31 @@ def format_portfolio_summary(portfolio_data: list, total_value: float,
         total_value: Total portfolio value
         asset_count: Number of assets
         asset_types: Set of asset types
+        cash: Available cash for investment
+        investment_goals: User's investment goals and preferences
     
     Returns:
         Formatted portfolio summary string
     """
+    # Calculate total portfolio value including cash
+    total_portfolio_value = total_value + cash
+    
     portfolio_summary = f"""
 Portfolio Summary:
-- Total Value: ${total_value:,.2f}
+- Total Portfolio Value: ${total_portfolio_value:,.2f}
+- Investment Assets Value: ${total_value:,.2f}
+- Available Cash: ${cash:,.2f}
 - Number of Assets: {asset_count}
-- Asset Types: {', '.join(asset_types) if asset_types else 'Not specified'}
+- Asset Types: {', '.join(asset_types) if asset_types else 'Not specified'}"""
+
+    # Add investment goals if provided
+    if investment_goals:
+        portfolio_summary += f"""
+
+Investment Goals:
+{investment_goals}"""
+        
+    portfolio_summary += """
 
 Detailed Holdings:"""
     
@@ -197,7 +217,8 @@ Detailed Holdings:"""
 
 
 def get_portfolio_analysis_prompt(portfolio_data: list, total_value: float,
-                                asset_count: int, asset_types: set) -> Dict[str, Any]:
+                                asset_count: int, asset_types: set,
+                                cash: float = 0, investment_goals: str = '') -> Dict[str, Any]:
     """
     Get formatted portfolio analysis prompt with data injection.
     
@@ -206,6 +227,8 @@ def get_portfolio_analysis_prompt(portfolio_data: list, total_value: float,
         total_value: Total portfolio value
         asset_count: Number of assets
         asset_types: Set of asset types
+        cash: Available cash for investment
+        investment_goals: User's investment goals and preferences
     
     Returns:
         Dictionary containing messages, max_tokens, and temperature for OpenAI API
@@ -216,7 +239,8 @@ def get_portfolio_analysis_prompt(portfolio_data: list, total_value: float,
         raise ValueError("Portfolio analysis prompt not found")
     
     portfolio_summary = format_portfolio_summary(
-        portfolio_data, total_value, asset_count, asset_types
+        portfolio_data, total_value, asset_count, asset_types,
+        cash=cash, investment_goals=investment_goals
     )
     
     return {
@@ -228,7 +252,8 @@ def get_portfolio_analysis_prompt(portfolio_data: list, total_value: float,
 
 def get_portfolio_recommendations_prompt(portfolio_data: list, total_value: float,
                                       asset_count: int, asset_types: set, 
-                                      analysis: str) -> Dict[str, Any]:
+                                      analysis: str, cash: float = 0,
+                                      investment_goals: str = '') -> Dict[str, Any]:
     """
     Get formatted portfolio recommendations prompt with data injection.
     
@@ -238,6 +263,8 @@ def get_portfolio_recommendations_prompt(portfolio_data: list, total_value: floa
         asset_count: Number of assets
         asset_types: Set of asset types
         analysis: Previous AI analysis of the portfolio
+        cash: Available cash for investment
+        investment_goals: User's investment goals and preferences
     
     Returns:
         Dictionary containing messages, max_tokens, and temperature for OpenAI API
@@ -248,7 +275,8 @@ def get_portfolio_recommendations_prompt(portfolio_data: list, total_value: floa
         raise ValueError("Portfolio recommendations prompt not found")
     
     portfolio_summary = format_portfolio_summary(
-        portfolio_data, total_value, asset_count, asset_types
+        portfolio_data, total_value, asset_count, asset_types,
+        cash=cash, investment_goals=investment_goals
     )
     
     return {

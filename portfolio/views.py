@@ -132,10 +132,17 @@ def analyze_portfolio(request):
     if not portfolio_data:
         return Response({'error': 'Portfolio data is required'}, status=status.HTTP_400_BAD_REQUEST)
     
+    # Get available cash and investment goals
+    cash = request.data.get('cash', 0)
+    investment_goals = request.data.get('investment_goals', '')
+    
     # Calculate some basic metrics
     total_value = sum(asset.get('value', 0) for asset in portfolio_data)
     asset_count = len(portfolio_data)
     asset_types = set(asset.get('type') for asset in portfolio_data if asset.get('type'))
+    
+    # Total portfolio value including cash
+    total_portfolio_value = total_value + cash
     
     # Create OpenAI client
     client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
@@ -149,7 +156,9 @@ def analyze_portfolio(request):
             portfolio_data, 
             total_value, 
             asset_count, 
-            asset_types
+            asset_types,
+            cash=cash,
+            investment_goals=investment_goals
         )
         
         analysis_response = client.chat.completions.create(
@@ -174,7 +183,9 @@ def analyze_portfolio(request):
                 total_value, 
                 asset_count, 
                 asset_types,
-                analysis=ai_analysis
+                analysis=ai_analysis,
+                cash=cash,
+                investment_goals=investment_goals
             )
             
             recommendations_response = client.chat.completions.create(
@@ -283,8 +294,11 @@ def analyze_portfolio(request):
     # Portfolio analysis response
     analysis = {
         'total_value': total_value,
+        'total_portfolio_value': total_portfolio_value,
+        'cash': cash,
         'asset_count': asset_count,
         'asset_types': list(asset_types),
+        'investment_goals': investment_goals,
         'analysis': ai_analysis,
         'recommendations': ai_recommendations
     }

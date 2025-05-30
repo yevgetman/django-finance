@@ -13,12 +13,15 @@ Django Finance is a web application that provides intelligent financial portfoli
 - Deep analysis of portfolio composition and balance
 - Risk assessment and diversification evaluation
 - Performance insights and strengths/weaknesses identification
+- Personalized analysis based on investment goals
+- Cash allocation recommendations
 - All powered by OpenAI's GPT models
 
 ### 💡 Intelligent Investment Recommendations
 - Actionable recommendations for each asset (Buy, Hold, Sell)
 - Specific guidance on quantity (All, Some, More)
-- Suggestions for new investments to improve portfolio balance
+- Suggestions for new investments aligned with your goals
+- Recommendations that consider available cash
 - Clear reasoning for each recommendation
 
 ### 🧠 Modular Prompt Management
@@ -106,6 +109,11 @@ POST /api/analyze/
 ```
 Analyzes a portfolio and provides AI-powered insights and recommendations.
 
+**Parameters:**
+- `portfolio`: Array of assets with their details (required)
+- `cash`: Available cash for investment (optional, default: 0)
+- `investment_goals`: Text description of investment objectives, risk tolerance, time horizon, etc. (optional, default: empty string)
+
 Example request body:
 ```json
 {
@@ -124,7 +132,9 @@ Example request body:
       "current_price": 300,
       "value": 1500
     }
-  ]
+  ],
+  "cash": 5000,
+  "investment_goals": "Looking to diversify into renewable energy with moderate risk tolerance and a 10-year investment horizon."
 }
 ```
 
@@ -132,8 +142,11 @@ Example response:
 ```json
 {
   "total_value": 3000,
+  "total_portfolio_value": 8000,
+  "cash": 5000,
   "asset_count": 2,
   "asset_types": ["Stock"],
+  "investment_goals": "Looking to diversify into renewable energy with moderate risk tolerance and a 10-year investment horizon.",
   "analysis": "Detailed AI analysis of the portfolio...",
   "recommendations": [
     {
@@ -149,10 +162,10 @@ Example response:
       "reason": "Excellent growth trajectory and cloud dominance."
     },
     {
-      "ticker": "VTI",
+      "ticker": "ICLN",
       "action": "BUY",
       "quantity": "NEW",
-      "reason": "Adds broad market exposure to diversify portfolio."
+      "reason": "Provides exposure to renewable energy sector aligning with investment goals."
     }
   ]
 }
