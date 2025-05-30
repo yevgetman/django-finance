@@ -117,7 +117,7 @@ Focus on actionable, specific recommendations with clear rationale.
             "the portfolio, plus suggestions for new investments to improve portfolio balance."
         ),
         user_template="""
-Based on the portfolio analysis below, provide specific actionable recommendations for each asset in this portfolio. 
+Based on the portfolio analysis below, provide specific actionable recommendations for each asset in this portfolio.
 
 PORTFOLIO ANALYSIS:
 {analysis}
@@ -125,18 +125,25 @@ PORTFOLIO ANALYSIS:
 PORTFOLIO DETAILS:
 {portfolio_summary}
 
-For EACH existing asset, provide ONE of these recommendations:
-- BUY MORE: Specify why and approximate percentage to increase
-- HOLD: Explain why the position is appropriate
-- REDUCE: Specify why and approximate percentage to decrease
-- SELL ALL: Explain why the asset should be eliminated
+RESPONSE FORMAT:
+You MUST format your response as a structured list of recommendations, with each recommendation strictly following this format:
 
-ALSO provide 2-4 NEW INVESTMENT recommendations to improve portfolio balance, including:
-- Specific asset types or securities
-- Why they would improve the portfolio
-- Suggested allocation percentage
+FOR EXISTING ASSETS:
+- TICKER: AAPL, ACTION: BUY, QUANTITY: MORE, REASON: Strong growth potential.
 
-Format recommendations in a clear, actionable list.
+FOR NEW INVESTMENTS:
+- TICKER: VTI, ACTION: BUY, QUANTITY: NEW, REASON: Adds broad market exposure.
+
+IMPORTANT INSTRUCTIONS:
+1. Each recommendation MUST start with a dash and appear on its own line
+2. You MUST include the EXACT ticker symbol for each asset (do not leave TICKER blank or use placeholders)
+3. For existing assets, use the ticker symbols provided in the portfolio details
+4. For new investments, suggest SPECIFIC ticker symbols (not generic asset classes)
+5. Use ONLY these ACTION values: BUY, HOLD, or SELL
+6. Use ONLY these QUANTITY values: ALL (sell entire position), SOME (reduce position), MORE (increase position), or NEW (for new investments)
+7. Include a brief REASON limited to one sentence
+
+You MUST provide a recommendation for EACH existing asset in the portfolio, followed by 2-3 recommendations for NEW investments that would improve portfolio balance.
         """.strip(),
         max_tokens=1000,
         temperature=0.7
@@ -178,10 +185,13 @@ Portfolio Summary:
 
 Detailed Holdings:"""
     
+    # Make ticker symbols prominent in the summary
     for asset in portfolio_data:
+        # Ensure symbol is prominently displayed at the start
+        ticker = asset.get('symbol', 'Unknown')
         portfolio_summary += f"""
-- {asset.get('symbol', 'Unknown')}: {asset.get('type', 'Unknown')} - ${asset.get('value', 0):,.2f}
-  Shares: {asset.get('shares', 'N/A')}, Current Price: ${asset.get('current_price', 'N/A')}"""
+- TICKER: {ticker} | Type: {asset.get('type', 'Unknown')} | Value: ${asset.get('value', 0):,.2f}
+  Shares: {asset.get('shares', 'N/A')} | Current Price: ${asset.get('current_price', 'N/A')}"""
     
     return portfolio_summary
 
