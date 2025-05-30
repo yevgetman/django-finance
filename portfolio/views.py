@@ -4,6 +4,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 import yfinance as yf
 import concurrent.futures
+import os
+from openai import OpenAI
+from .prompts import get_portfolio_analysis_prompt
 
 def get_ticker_data(ticker):
     """Helper function to get data for a single ticker"""
@@ -129,24 +132,45 @@ def analyze_portfolio(request):
     if not portfolio_data:
         return Response({'error': 'Portfolio data is required'}, status=status.HTTP_400_BAD_REQUEST)
     
-    # Here is where we would integrate with an LLM to analyze the portfolio
-    # For now, we'll return a simple mock response based on the provided portfolio data
-    
     # Calculate some basic metrics
     total_value = sum(asset.get('value', 0) for asset in portfolio_data)
     asset_count = len(portfolio_data)
     asset_types = set(asset.get('type') for asset in portfolio_data if asset.get('type'))
     
-    # Basic portfolio analysis (placeholder for LLM-based analysis)
+    # Generate AI-powered analysis using OpenAI
+    try:
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        
+        # Get formatted prompt using prompt management system
+        prompt_config = get_portfolio_analysis_prompt(
+            portfolio_data, 
+            total_value, 
+            asset_count, 
+            asset_types
+        )
+        
+        response = client.chat.completions.create(
+            model=os.getenv('OPENAI_MODEL', 'gpt-4o'),
+            messages=prompt_config['messages'],
+            max_tokens=prompt_config['max_tokens'],
+            temperature=prompt_config['temperature']
+        )
+        
+        ai_analysis = response.choices[0].message.content
+        
+    except Exception as e:
+        ai_analysis = f"AI analysis temporarily unavailable: {str(e)}"
+    
+    # Portfolio analysis response
     analysis = {
         'total_value': total_value,
         'asset_count': asset_count,
         'asset_types': list(asset_types),
-        'analysis': 'This is a placeholder for AI-driven portfolio analysis. In the future, this will leverage LLMs to provide insights on portfolio balance, risk assessment, and recommendations.',
+        'analysis': ai_analysis,
         'recommendations': [
-            'Consider diversifying your portfolio across more asset classes',
-            'Your portfolio appears to be overweight in technology stocks',
-            'Consider adding more fixed income assets for stability'
+            'NOT SET',
+            'WILL BE SET IN THE FUTURE',
+            'THIS IS A PLACEHOLDER'
         ]
     }
     
