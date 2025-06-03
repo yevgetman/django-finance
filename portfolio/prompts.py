@@ -158,6 +158,14 @@ IMPORTANT INSTRUCTIONS:
 13. Be strategic about dollar amounts - consider portfolio balance, risk management, and diversification
 
 You MUST provide a recommendation for EACH existing asset in the portfolio, followed by 2-3 recommendations for NEW investments that would improve portfolio balance and achieve the stated investment goals.
+
+AFTER your recommendations, provide a section titled "FEEDBACK:" that contains your overall assessment, rationale, and strategic thinking behind your recommendations. This should include:
+1. A summary of the current portfolio's strengths and weaknesses
+2. The high-level strategy behind your recommendations
+3. How your recommendations align with the user's investment goals
+4. Any additional context or considerations the user should be aware of
+
+Limit this feedback to a few paragraphs or less and make it conversational and actionable.
         """.strip(),
         max_tokens=1200,
         temperature=0.7
