@@ -121,6 +121,9 @@ Focus on actionable, specific recommendations with clear rationale.
         user_template="""
 Based on the portfolio analysis below, provide specific actionable recommendations for each asset in this portfolio.
 
+INVESTMENT GOALS:
+{investment_goals}
+
 PORTFOLIO ANALYSIS:
 {analysis}
 
@@ -290,7 +293,8 @@ def get_portfolio_recommendations_prompt(portfolio_data: list, total_value: floa
     return {
         'messages': prompt_template.get_messages(
             portfolio_summary=portfolio_summary,
-            analysis=analysis
+            analysis=analysis,
+            investment_goals=investment_goals
         ),
         'max_tokens': prompt_template.max_tokens,
         'temperature': prompt_template.temperature
