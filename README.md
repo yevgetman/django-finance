@@ -16,6 +16,7 @@ Django Finance is a web application that provides intelligent financial portfoli
 - Personalized analysis based on investment goals
 - Cash allocation recommendations
 - All powered by OpenAI's GPT models
+- Persistent conversation threads for continued context
 
 ### 💡 Intelligent Investment Recommendations
 - Actionable recommendations for each asset (Buy, Hold, Sell)
@@ -23,6 +24,8 @@ Django Finance is a web application that provides intelligent financial portfoli
 - Suggestions for new investments aligned with your goals
 - Recommendations that consider available cash
 - Clear reasoning for each recommendation
+- Dedicated feedback section explaining the rationale behind recommendations
+- Separate API endpoint for targeted recommendations
 
 ### 🧠 Modular Prompt Management
 - Structured system for managing AI prompts
@@ -71,10 +74,15 @@ Django Finance is a web application that provides intelligent financial portfoli
    OPENAI_API_KEY=your_openai_api_key_here
    OPENAI_MODEL=gpt-4o
    OPENAI_RECOMMENDATIONS_MODEL=gpt-4o
+   
+   # OpenAI Assistants (optional)
+   # OPENAI_ASSISTANT_ID=your_analysis_assistant_id
+   # OPENAI_RECOMMENDATIONS_ASSISTANT_ID=your_recommendations_assistant_id
 
    # Django Configuration
    DEBUG=True
    SECRET_KEY=your_secret_key_here
+   AI_DEBUG=True  # Enable to include AI debug information in responses
    ```
 
 2. Replace `your_openai_api_key_here` with your actual OpenAI API key.
@@ -107,12 +115,13 @@ Returns detailed information about the specified stocks.
 ```
 POST /api/analyze/
 ```
-Analyzes a portfolio and provides AI-powered insights and recommendations.
+Analyzes a portfolio and provides AI-powered insights (without recommendations).
 
 **Parameters:**
 - `portfolio`: Array of assets with their details (required)
 - `cash`: Available cash for investment (optional, default: 0)
 - `investment_goals`: Text description of investment objectives, risk tolerance, time horizon, etc. (optional, default: empty string)
+- `conversation_id`: UUID for continuing a previous conversation (optional)
 
 Example request body:
 ```json
@@ -148,6 +157,32 @@ Example response:
   "asset_types": ["Stock"],
   "investment_goals": "Looking to diversify into renewable energy with moderate risk tolerance and a 10-year investment horizon.",
   "analysis": "Detailed AI analysis of the portfolio...",
+  "conversation_id": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+### Portfolio Recommendations
+
+```
+POST /api/recommendations/
+```
+Provides specific investment recommendations for a portfolio.
+
+**Parameters:**
+- `portfolio`: Array of assets with their details (required)
+- `cash`: Available cash for investment (optional, default: 0)
+- `investment_goals`: Text description of investment objectives, risk tolerance, time horizon, etc. (optional, default: empty string)
+- `conversation_id`: UUID for continuing a previous conversation (optional)
+
+Example response:
+```json
+{
+  "total_value": 3000,
+  "total_portfolio_value": 8000,
+  "cash": 5000,
+  "asset_count": 2,
+  "asset_types": ["Stock"],
+  "investment_goals": "Looking to diversify into renewable energy with moderate risk tolerance and a 10-year investment horizon.",
   "recommendations": [
     {
       "ticker": "AAPL",
@@ -167,9 +202,10 @@ Example response:
       "quantity": "NEW",
       "reason": "Provides exposure to renewable energy sector aligning with investment goals."
     }
-  ]
+  ],
+  "feedback": "Your portfolio shows good exposure to tech but could benefit from diversification into renewable energy given your stated goals. The recommendations aim to maintain your core holdings while adding green energy exposure to align with your 10-year horizon.",
+  "conversation_id": "123e4567-e89b-12d3-a456-426614174000"
 }
-```
 
 ## 🧠 AI Integration
 
@@ -183,6 +219,16 @@ The AI integration uses a sophisticated prompt management system found in `portf
 - Dynamic data injection
 - Configurable model parameters
 - Easy extension for new AI features
+
+### 🔄 Conversation Persistence
+
+The application supports persistent conversations with the AI for both analysis and recommendations:
+
+- Each conversation is assigned a unique `conversation_id`
+- Clients can pass the `conversation_id` in subsequent requests to continue the conversation
+- The AI maintains context from previous interactions within the same conversation
+- Separate conversation threads for analysis and recommendations
+- Leverages OpenAI's thread-based conversation APIs (with fallback to direct completions)
 
 ## 🔒 Security
 
@@ -199,6 +245,9 @@ django-finance/
 │   ├── views.py           # API endpoints
 │   ├── prompts.py         # AI prompt management
 │   ├── ai_utils.py        # AI helper utilities
+│   ├── ai_debug.py        # Debug tools for AI interactions
+│   ├── conversation_utils.py # Conversation persistence utilities
+│   ├── models.py          # Database models (including Conversation model)
 ├── .env                   # Environment variables (create this)
 ├── requirements.txt       # Project dependencies
 └── manage.py              # Django management script
