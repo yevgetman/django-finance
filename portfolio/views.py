@@ -226,7 +226,6 @@ def analyze_portfolio(request):
     # Create OpenAI client
     client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
     ai_analysis = "Analysis unavailable"
-    ai_recommendations = []
     
     # Step 1: Generate AI-powered analysis using first model
     try:
@@ -280,184 +279,7 @@ def analyze_portfolio(request):
                 error=str(e)
             )
     
-    # Step 2: Generate recommendations using second model
-    try:
-        # Only proceed if analysis was successful
-        if not ai_analysis.startswith("AI analysis temporarily unavailable"):
-            # Get formatted prompt for portfolio recommendations
-            recommendations_prompt_config = get_portfolio_recommendations_prompt(
-                portfolio_data, 
-                total_value, 
-                asset_count, 
-                asset_types,
-                analysis=ai_analysis,
-                cash=cash,
-                investment_goals=investment_goals
-            )
-            
-            # Record the LLM call for debugging
-            recommendations_model = os.getenv('OPENAI_RECOMMENDATIONS_MODEL', 'gpt-4o')
-            rec_call_id = debug_collector.record_llm_call(
-                model=recommendations_model,
-                prompt_type="portfolio_recommendations",
-                messages=recommendations_prompt_config['messages'],
-                max_tokens=recommendations_prompt_config['max_tokens'],
-                temperature=recommendations_prompt_config['temperature']
-            )
-            
-            # Make the API call with timing
-            start_time = time.time()
-            recommendations_response = client.chat.completions.create(
-                model=recommendations_model,
-                messages=recommendations_prompt_config['messages'],
-                max_tokens=recommendations_prompt_config['max_tokens'],
-                temperature=recommendations_prompt_config['temperature']
-            )
-            duration_ms = int((time.time() - start_time) * 1000)
-            
-            # Process recommendations response
-            recommendations_text = recommendations_response.choices[0].message.content
-            
-            # Update debug collector with response data
-            debug_collector.update_llm_call_response(
-                call_id=rec_call_id,
-                response_content=recommendations_text,
-                response_tokens=recommendations_response.usage.total_tokens if hasattr(recommendations_response, 'usage') else None,
-                duration_ms=duration_ms
-            )
-            
-            # Function to extract feedback section from recommendations text
-            def extract_feedback(text):
-                # Simple extraction method: look for 'FEEDBACK:' header and capture everything after it
-                feedback_match = re.search(r'(?i)(?:###\s*)?\bFEEDBACK:\b\s*(.*)', text, re.DOTALL)
-                if feedback_match:
-                    # Get everything after the FEEDBACK: marker
-                    raw_feedback = feedback_match.group(1).strip()
-                    print(f"Found feedback section with {len(raw_feedback)} characters")
-                    return raw_feedback
-                    
-                # Fallback: look for content after the last recommendation
-                lines = text.split('\n')
-                last_recommendation_index = -1
-                
-                for i, line in enumerate(lines):
-                    if line.strip().startswith('-') and ('ACTION:' in line or 'TICKER:' in line):
-                        last_recommendation_index = i
-                
-                if last_recommendation_index >= 0 and last_recommendation_index < len(lines) - 2:  # At least two lines after
-                    # Skip one line after the last recommendation in case it's empty
-                    potential_content = "\n".join(lines[last_recommendation_index + 2:]).strip()
-                    if potential_content:
-                        print(f"Found content after recommendations: {len(potential_content)} characters")
-                        return potential_content
-                        
-                print("No feedback section found")
-                return ""
-            
-            # Initialize variables for recommendations and feedback
-            structured_recommendations = []
-            feedback_text = "" # Default empty feedback in case extraction fails
-            
-            if recommendations_text:
-                # Extract feedback section
-                feedback_text = extract_feedback(recommendations_text)
-                
-                # Process recommendations (lines starting with dash)
-                for line in recommendations_text.split('\n'):
-                    # Skip empty lines and only process recommendation lines (starting with dash)
-                    if line.strip() and line.strip().startswith('-'):
-                        # Remove the dash and trim
-                        line = line[1:].strip()
-                        
-                        try:
-                            # Improved parsing for structured format
-                            # Look for explicit labels and handle different formatting possibilities
-                        
-                            # Parse ticker - try multiple formats and ensure it's not empty
-                            ticker = ''
-                            if 'TICKER:' in line:
-                                ticker_part = line.split('TICKER:')[1].split(',')[0].strip()
-                                ticker = ticker_part.replace('[', '').replace(']', '')
-                            elif 'Symbol:' in line:
-                                ticker_part = line.split('Symbol:')[1].split(',')[0].strip()
-                                ticker = ticker_part.replace('[', '').replace(']', '')
-                            
-                            # If we still don't have a ticker but have a symbol in the portfolio data, try to match
-                            if not ticker and 'ACTION:' in line and 'QUANTITY:' in line:
-                                for asset in portfolio_data:
-                                    asset_symbol = asset.get('symbol', '')
-                                    # If this recommendation seems to match an existing asset
-                                    if asset_symbol and asset_symbol in line:
-                                        ticker = asset_symbol
-                                        break
-                            
-                            # Parse action
-                            action_part = ''
-                            if 'ACTION:' in line:
-                                action_part = line.split('ACTION:')[1].split(',')[0].strip()
-                            
-                            # Parse quantity - now expecting numeric dollar amounts
-                            quantity_part = ''
-                            if 'QUANTITY:' in line:
-                                quantity_raw = line.split('QUANTITY:')[1].split(',')[0].strip()
-                                # Clean up the quantity value and validate it's numeric
-                                quantity_cleaned = quantity_raw.replace('$', '').replace(',', '')
-                                try:
-                                    # Validate that it's a number
-                                    float(quantity_cleaned)
-                                    quantity_part = quantity_cleaned
-                                except ValueError:
-                                    # If not numeric, keep the original value for debugging
-                                    quantity_part = quantity_raw
-                            
-                            # Parse reason
-                            reason_part = ''
-                            if 'REASON:' in line:
-                                reason_part = line.split('REASON:')[1].strip()
-                            
-                            # Create structured recommendation with improved data
-                            recommendation = {
-                                'ticker': ticker,
-                                'action': action_part,
-                                'quantity': quantity_part,
-                                'reason': reason_part
-                            }
-                            
-                            structured_recommendations.append(recommendation)
-                        except Exception as e:
-                            # If parsing fails, include the raw line
-                            structured_recommendations.append({
-                                'ticker': 'PARSE_ERROR',
-                                'action': 'UNKNOWN',
-                                'quantity': 'UNKNOWN',
-                                'reason': f'Error parsing: {line}'
-                            })
-            
-            # If parsing didn't work well, include the raw text
-            if not structured_recommendations:
-                structured_recommendations = [{
-                    'ticker': 'RAW_RESPONSE',
-                    'action': 'UNKNOWN',
-                    'quantity': 'UNKNOWN',
-                    'reason': recommendations_text
-                }]
-                
-            ai_recommendations = structured_recommendations
-    except Exception as e:
-        ai_recommendations = [{
-            'ticker': 'ERROR',
-            'action': 'UNAVAILABLE',
-            'quantity': 'UNKNOWN',
-            'reason': f"Recommendations temporarily unavailable: {str(e)}"
-        }]
-        feedback_text = "Unable to generate feedback due to an error."
-        # Update debug collector with error
-        if 'rec_call_id' in locals():
-            debug_collector.update_llm_call_response(
-                call_id=rec_call_id,
-                response_content="",
-                error=str(e)
-            )
+    # Removed the recommendations part as it's now a separate endpoint
     
     # Portfolio analysis response
     analysis = {
@@ -467,9 +289,7 @@ def analyze_portfolio(request):
         'asset_count': asset_count,
         'asset_types': list(asset_types),
         'investment_goals': investment_goals,
-        'analysis': ai_analysis,
-        'recommendations': ai_recommendations,
-        'feedback': feedback_text
+        'analysis': ai_analysis
     }
     
     # Inject debug data if enabled
