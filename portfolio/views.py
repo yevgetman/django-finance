@@ -6,9 +6,11 @@ import yfinance as yf
 import concurrent.futures
 import os
 import time
+import uuid
 from openai import OpenAI
 from .prompts import get_portfolio_analysis_prompt, get_portfolio_recommendations_prompt
 from .ai_debug import create_debug_collector, inject_debug_data
+from .conversation_utils import get_or_create_conversation, format_message_for_thread, add_message_to_thread, get_latest_assistant_message
 import pandas as pd
 import re
 
@@ -214,6 +216,7 @@ def analyze_portfolio(request):
     # Get available cash and investment goals
     cash = request.data.get('cash', 0)
     investment_goals = request.data.get('investment_goals', '')
+    conversation_id = request.data.get('conversation_id')
     
     # Recalculate metrics with updated prices
     total_value = sum(asset.get('value', 0) for asset in portfolio_data)
@@ -227,45 +230,94 @@ def analyze_portfolio(request):
     client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
     ai_analysis = "Analysis unavailable"
     
-    # Step 1: Generate AI-powered analysis using first model
+    # Get or create a conversation thread
     try:
-        # Get formatted prompt for portfolio analysis
-        analysis_prompt_config = get_portfolio_analysis_prompt(
-            portfolio_data, 
-            total_value, 
-            asset_count, 
-            asset_types,
-            cash=cash,
-            investment_goals=investment_goals
+        conversation, created = get_or_create_conversation(
+            conversation_id=conversation_id,
+            conversation_type='analysis'
+        )
+        
+        # Update the conversation with the latest portfolio data
+        conversation.last_portfolio_data = {
+            'portfolio': portfolio_data,
+            'cash': cash,
+            'investment_goals': investment_goals
+        }
+        conversation.save(update_fields=['last_portfolio_data'])
+    except Exception as e:
+        # If conversation creation fails, create a fallback response object
+        # This won't have conversation persistence but will allow the API to work
+        print(f"Error creating conversation: {str(e)}")
+        conversation = type('obj', (object,), {'id': 'temp-' + str(uuid.uuid4())})
+    
+    # Step 1: Generate AI-powered analysis using conversation thread
+    try:
+        # Format portfolio data as a message for the thread
+        message_content = format_message_for_thread(
+            portfolio_data,
+            total_value,
+            cash,
+            investment_goals,
+            'analysis'
         )
         
         # Record the LLM call for debugging
         analysis_model = os.getenv('OPENAI_MODEL', 'gpt-4o')
         call_id = debug_collector.record_llm_call(
             model=analysis_model,
-            prompt_type="portfolio_analysis",
-            messages=analysis_prompt_config['messages'],
-            max_tokens=analysis_prompt_config['max_tokens'],
-            temperature=analysis_prompt_config['temperature']
+            prompt_type="portfolio_analysis_thread",
+            messages=[{"role": "user", "content": message_content}],
+            max_tokens=1000,
+            temperature=0.7
         )
         
-        # Make the API call with timing
+        # Add the message to the conversation thread
         start_time = time.time()
-        analysis_response = client.chat.completions.create(
-            model=analysis_model,
-            messages=analysis_prompt_config['messages'],
-            max_tokens=analysis_prompt_config['max_tokens'],
-            temperature=analysis_prompt_config['temperature']
-        )
-        duration_ms = int((time.time() - start_time) * 1000)
         
-        ai_analysis = analysis_response.choices[0].message.content
+        # Add message to thread
+        add_message_to_thread(conversation.openai_thread_id, message_content)
+        
+        # Run the assistant on the thread
+        assistant_id = os.getenv('OPENAI_ASSISTANT_ID', 'asst_123')  # Replace with actual assistant ID
+        
+        # For direct chat.completions fallback if assistant isn't set up
+        if not assistant_id or assistant_id == 'asst_123':
+            # Fallback to direct completion API if no assistant configured
+            analysis_prompt_config = get_portfolio_analysis_prompt(
+                portfolio_data, 
+                total_value, 
+                asset_count, 
+                asset_types,
+                cash=cash,
+                investment_goals=investment_goals
+            )
+            
+            analysis_response = client.chat.completions.create(
+                model=analysis_model,
+                messages=analysis_prompt_config['messages'],
+                max_tokens=analysis_prompt_config['max_tokens'],
+                temperature=analysis_prompt_config['temperature']
+            )
+            ai_analysis = analysis_response.choices[0].message.content
+        else:
+            from .conversation_utils import run_thread_with_assistant
+            # Run assistant on the thread
+            run_thread_with_assistant(conversation.openai_thread_id, assistant_id)
+            
+            # Get the latest assistant response
+            assistant_message = get_latest_assistant_message(conversation.openai_thread_id)
+            if assistant_message:
+                ai_analysis = assistant_message.content[0].text.value
+            else:
+                ai_analysis = "No analysis available from the conversation."
+        
+        duration_ms = int((time.time() - start_time) * 1000)
         
         # Update debug collector with response data
         debug_collector.update_llm_call_response(
             call_id=call_id,
             response_content=ai_analysis,
-            response_tokens=analysis_response.usage.total_tokens if hasattr(analysis_response, 'usage') else None,
+            response_tokens=None,  # Token count not available from thread API
             duration_ms=duration_ms
         )
         
@@ -289,7 +341,8 @@ def analyze_portfolio(request):
         'asset_count': asset_count,
         'asset_types': list(asset_types),
         'investment_goals': investment_goals,
-        'analysis': ai_analysis
+        'analysis': ai_analysis,
+        'conversation_id': str(conversation.id)
     }
     
     # Inject debug data if enabled
@@ -317,6 +370,7 @@ def get_portfolio_recommendations(request):
     # Get available cash and investment goals
     cash = request.data.get('cash', 0)
     investment_goals = request.data.get('investment_goals', '')
+    conversation_id = request.data.get('conversation_id')
     
     # Recalculate metrics with updated prices
     total_value = sum(asset.get('value', 0) for asset in portfolio_data)
@@ -331,48 +385,95 @@ def get_portfolio_recommendations(request):
     ai_recommendations = []
     feedback_text = ""
     
-    # Generate recommendations directly without analysis step
+    # Get or create a conversation thread
     try:
-        # Get formatted prompt for portfolio recommendations
-        # Pass empty string for analysis since we're bypassing that step
-        recommendations_prompt_config = get_portfolio_recommendations_prompt(
-            portfolio_data, 
-            total_value, 
-            asset_count, 
-            asset_types,
-            analysis="",  # Empty analysis since we're skipping that step
-            cash=cash,
-            investment_goals=investment_goals
+        conversation, created = get_or_create_conversation(
+            conversation_id=conversation_id,
+            conversation_type='recommendations'
+        )
+        
+        # Update the conversation with the latest portfolio data
+        conversation.last_portfolio_data = {
+            'portfolio': portfolio_data,
+            'cash': cash,
+            'investment_goals': investment_goals
+        }
+        conversation.save(update_fields=['last_portfolio_data'])
+    except Exception as e:
+        # If conversation creation fails, create a fallback response object
+        # This won't have conversation persistence but will allow the API to work
+        print(f"Error creating conversation: {str(e)}")
+        conversation = type('obj', (object,), {'id': 'temp-' + str(uuid.uuid4())})
+    
+    # Generate recommendations using conversation thread
+    try:
+        # Format portfolio data as a message for the thread
+        message_content = format_message_for_thread(
+            portfolio_data,
+            total_value,
+            cash,
+            investment_goals,
+            'recommendations'
         )
         
         # Record the LLM call for debugging
         recommendations_model = os.getenv('OPENAI_RECOMMENDATIONS_MODEL', 'gpt-4o')
         rec_call_id = debug_collector.record_llm_call(
             model=recommendations_model,
-            prompt_type="portfolio_recommendations_direct",
-            messages=recommendations_prompt_config['messages'],
-            max_tokens=recommendations_prompt_config['max_tokens'],
-            temperature=recommendations_prompt_config['temperature']
+            prompt_type="portfolio_recommendations_thread",
+            messages=[{"role": "user", "content": message_content}],
+            max_tokens=1200,
+            temperature=0.7
         )
         
-        # Make the API call with timing
+        # Add the message to the conversation thread
         start_time = time.time()
-        recommendations_response = client.chat.completions.create(
-            model=recommendations_model,
-            messages=recommendations_prompt_config['messages'],
-            max_tokens=recommendations_prompt_config['max_tokens'],
-            temperature=recommendations_prompt_config['temperature']
-        )
-        duration_ms = int((time.time() - start_time) * 1000)
         
-        # Process recommendations response
-        recommendations_text = recommendations_response.choices[0].message.content
+        # Add message to thread
+        add_message_to_thread(conversation.openai_thread_id, message_content)
+        
+        # Run the assistant on the thread
+        assistant_id = os.getenv('OPENAI_RECOMMENDATIONS_ASSISTANT_ID', 'asst_rec_123')  # Replace with actual assistant ID
+        
+        # For direct chat.completions fallback if assistant isn't set up
+        if not assistant_id or assistant_id == 'asst_rec_123':
+            # Fallback to direct completion API if no assistant configured
+            recommendations_prompt_config = get_portfolio_recommendations_prompt(
+                portfolio_data, 
+                total_value, 
+                asset_count, 
+                asset_types,
+                analysis="",  # Empty analysis since we're skipping that step
+                cash=cash,
+                investment_goals=investment_goals
+            )
+            
+            recommendations_response = client.chat.completions.create(
+                model=recommendations_model,
+                messages=recommendations_prompt_config['messages'],
+                max_tokens=recommendations_prompt_config['max_tokens'],
+                temperature=recommendations_prompt_config['temperature']
+            )
+            recommendations_text = recommendations_response.choices[0].message.content
+        else:
+            from .conversation_utils import run_thread_with_assistant
+            # Run assistant on the thread
+            run_thread_with_assistant(conversation.openai_thread_id, assistant_id)
+            
+            # Get the latest assistant response
+            assistant_message = get_latest_assistant_message(conversation.openai_thread_id)
+            if assistant_message:
+                recommendations_text = assistant_message.content[0].text.value
+            else:
+                recommendations_text = "No recommendations available from the conversation."
+        
+        duration_ms = int((time.time() - start_time) * 1000)
         
         # Update debug collector with response data
         debug_collector.update_llm_call_response(
             call_id=rec_call_id,
             response_content=recommendations_text,
-            response_tokens=recommendations_response.usage.total_tokens if hasattr(recommendations_response, 'usage') else None,
+            response_tokens=None,  # Token count not available from thread API
             duration_ms=duration_ms
         )
         
@@ -518,7 +619,8 @@ def get_portfolio_recommendations(request):
         'asset_types': list(asset_types),
         'investment_goals': investment_goals,
         'recommendations': ai_recommendations,
-        'feedback': feedback_text
+        'feedback': feedback_text,
+        'conversation_id': str(conversation.id)
     }
     
     # Inject debug data if enabled
