@@ -5,8 +5,10 @@ from rest_framework.response import Response
 import yfinance as yf
 import concurrent.futures
 import os
+import time
 from openai import OpenAI
 from .prompts import get_portfolio_analysis_prompt, get_portfolio_recommendations_prompt
+from .ai_debug import create_debug_collector, inject_debug_data
 
 def get_ticker_data(ticker):
     """Helper function to get data for a single ticker"""
@@ -126,6 +128,9 @@ def get_ticker_info(request):
 @permission_classes([AllowAny])
 def analyze_portfolio(request):
     """Analyze a portfolio and provide recommendations"""
+    # Initialize AI debug collector
+    debug_collector = create_debug_collector()
+    
     # Get portfolio data from the request
     portfolio_data = request.data.get('portfolio', [])
     
@@ -161,17 +166,45 @@ def analyze_portfolio(request):
             investment_goals=investment_goals
         )
         
-        analysis_response = client.chat.completions.create(
-            model=os.getenv('OPENAI_MODEL', 'gpt-4o'),
+        # Record the LLM call for debugging
+        analysis_model = os.getenv('OPENAI_MODEL', 'gpt-4o')
+        call_id = debug_collector.record_llm_call(
+            model=analysis_model,
+            prompt_type="portfolio_analysis",
             messages=analysis_prompt_config['messages'],
             max_tokens=analysis_prompt_config['max_tokens'],
             temperature=analysis_prompt_config['temperature']
         )
         
+        # Make the API call with timing
+        start_time = time.time()
+        analysis_response = client.chat.completions.create(
+            model=analysis_model,
+            messages=analysis_prompt_config['messages'],
+            max_tokens=analysis_prompt_config['max_tokens'],
+            temperature=analysis_prompt_config['temperature']
+        )
+        duration_ms = int((time.time() - start_time) * 1000)
+        
         ai_analysis = analysis_response.choices[0].message.content
+        
+        # Update debug collector with response data
+        debug_collector.update_llm_call_response(
+            call_id=call_id,
+            response_content=ai_analysis,
+            response_tokens=analysis_response.usage.total_tokens if hasattr(analysis_response, 'usage') else None,
+            duration_ms=duration_ms
+        )
         
     except Exception as e:
         ai_analysis = f"AI analysis temporarily unavailable: {str(e)}"
+        # Update debug collector with error
+        if 'call_id' in locals():
+            debug_collector.update_llm_call_response(
+                call_id=call_id,
+                response_content="",
+                error=str(e)
+            )
     
     # Step 2: Generate recommendations using second model
     try:
@@ -188,15 +221,36 @@ def analyze_portfolio(request):
                 investment_goals=investment_goals
             )
             
-            recommendations_response = client.chat.completions.create(
-                model=os.getenv('OPENAI_RECOMMENDATIONS_MODEL', 'gpt-4o'),
+            # Record the LLM call for debugging
+            recommendations_model = os.getenv('OPENAI_RECOMMENDATIONS_MODEL', 'gpt-4o')
+            rec_call_id = debug_collector.record_llm_call(
+                model=recommendations_model,
+                prompt_type="portfolio_recommendations",
                 messages=recommendations_prompt_config['messages'],
                 max_tokens=recommendations_prompt_config['max_tokens'],
                 temperature=recommendations_prompt_config['temperature']
             )
             
+            # Make the API call with timing
+            start_time = time.time()
+            recommendations_response = client.chat.completions.create(
+                model=recommendations_model,
+                messages=recommendations_prompt_config['messages'],
+                max_tokens=recommendations_prompt_config['max_tokens'],
+                temperature=recommendations_prompt_config['temperature']
+            )
+            duration_ms = int((time.time() - start_time) * 1000)
+            
             # Process recommendations response
             recommendations_text = recommendations_response.choices[0].message.content
+            
+            # Update debug collector with response data
+            debug_collector.update_llm_call_response(
+                call_id=rec_call_id,
+                response_content=recommendations_text,
+                response_tokens=recommendations_response.usage.total_tokens if hasattr(recommendations_response, 'usage') else None,
+                duration_ms=duration_ms
+            )
             
             # Parse recommendations into structured objects
             structured_recommendations = []
@@ -290,6 +344,13 @@ def analyze_portfolio(request):
             'quantity': 'UNKNOWN',
             'reason': f"Recommendations temporarily unavailable: {str(e)}"
         }]
+        # Update debug collector with error
+        if 'rec_call_id' in locals():
+            debug_collector.update_llm_call_response(
+                call_id=rec_call_id,
+                response_content="",
+                error=str(e)
+            )
     
     # Portfolio analysis response
     analysis = {
@@ -303,4 +364,7 @@ def analyze_portfolio(request):
         'recommendations': ai_recommendations
     }
     
-    return Response(analysis)
+    # Inject debug data if enabled
+    enhanced_response = inject_debug_data(analysis, debug_collector)
+    
+    return Response(enhanced_response)
