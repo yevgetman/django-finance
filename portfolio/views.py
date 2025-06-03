@@ -291,23 +291,27 @@ def analyze_portfolio(request):
                     if 'ACTION:' in line:
                         action_part = line.split('ACTION:')[1].split(',')[0].strip()
                     
-                    # Parse quantity
+                    # Parse quantity - now expecting numeric dollar amounts
                     quantity_part = ''
                     if 'QUANTITY:' in line:
-                        quantity_part = line.split('QUANTITY:')[1].split(',')[0].strip()
+                        quantity_raw = line.split('QUANTITY:')[1].split(',')[0].strip()
+                        # Clean up the quantity value and validate it's numeric
+                        quantity_cleaned = quantity_raw.replace('$', '').replace(',', '')
+                        try:
+                            # Validate that it's a number
+                            float(quantity_cleaned)
+                            quantity_part = quantity_cleaned
+                        except ValueError:
+                            # If not numeric, keep the original value for debugging
+                            quantity_part = quantity_raw
                     
                     # Parse reason
                     reason_part = ''
                     if 'REASON:' in line:
                         reason_part = line.split('REASON:')[1].strip()
                     
-                    # For new investments without specific tickers, extract from reason if possible
-                    if not ticker and 'NEW' in quantity_part and reason_part:
-                        # Look for ticker-like patterns in reason (capitalized 1-5 letter words)
-                        import re
-                        ticker_candidates = re.findall(r'\b[A-Z]{1,5}\b', reason_part)
-                        if ticker_candidates:
-                            ticker = ticker_candidates[0]  # Use the first match
+                    # Remove the old logic for extracting tickers from "NEW" quantities
+                    # since we now expect specific dollar amounts
                     
                     # Create structured recommendation with improved data
                     recommendation = {
