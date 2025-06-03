@@ -9,6 +9,7 @@ import time
 from openai import OpenAI
 from .prompts import get_portfolio_analysis_prompt, get_portfolio_recommendations_prompt
 from .ai_debug import create_debug_collector, inject_debug_data
+import pandas as pd
 
 def get_ticker_data(ticker):
     """Helper function to get data for a single ticker"""
@@ -124,6 +125,75 @@ def get_ticker_info(request):
         'results': results
     })
 
+def update_portfolio_with_live_prices(portfolio_data):
+    """
+    Update portfolio data with live stock prices from yfinance.
+    
+    Args:
+        portfolio_data: List of portfolio assets
+        
+    Returns:
+        Updated portfolio data with current prices and recalculated values
+    """
+    # Create a copy of the portfolio data to avoid modifying the original
+    updated_portfolio = []
+    
+    for asset in portfolio_data:
+        # Create a copy of the asset to avoid modifying the original
+        updated_asset = asset.copy()
+        
+        # Get the ticker symbol
+        ticker_symbol = asset.get('symbol')
+        if not ticker_symbol:
+            # Skip assets without a symbol
+            updated_portfolio.append(updated_asset)
+            continue
+            
+        try:
+            # Fetch live price data from yfinance
+            ticker_obj = yf.Ticker(ticker_symbol)
+            
+            # Get the latest price information
+            live_price = None
+            
+            # First try to get the regular market price
+            try:
+                live_price = ticker_obj.info.get('regularMarketPrice')
+            except Exception as e:
+                pass
+                
+            # If that fails, try to get the current price from history
+            if not live_price:
+                try:
+                    history = ticker_obj.history(period="1d")
+                    if not history.empty:
+                        live_price = history.iloc[-1]['Close']
+                except Exception as e:
+                    pass
+            
+            # Update the asset with the live price
+            if live_price:
+                updated_asset['current_price'] = float(live_price)
+                
+                # If shares are provided, update the value based on current price
+                if 'shares' in updated_asset and updated_asset.get('shares'):
+                    try:
+                        shares = float(updated_asset.get('shares', 0))
+                        updated_asset['value'] = shares * float(live_price)
+                    except (ValueError, TypeError):
+                        # Keep original value if shares can't be converted to float
+                        pass
+                        
+                print(f"Updated {ticker_symbol} with live price: ${live_price}")
+        except Exception as e:
+            # If there's an error fetching the price, log it and keep the existing data
+            print(f"Error fetching data for {ticker_symbol}: {str(e)}")
+            
+        updated_portfolio.append(updated_asset)
+    
+    return updated_portfolio
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def analyze_portfolio(request):
@@ -137,11 +207,14 @@ def analyze_portfolio(request):
     if not portfolio_data:
         return Response({'error': 'Portfolio data is required'}, status=status.HTTP_400_BAD_REQUEST)
     
+    # Update portfolio with live stock prices from yfinance
+    portfolio_data = update_portfolio_with_live_prices(portfolio_data)
+    
     # Get available cash and investment goals
     cash = request.data.get('cash', 0)
     investment_goals = request.data.get('investment_goals', '')
     
-    # Calculate some basic metrics
+    # Recalculate metrics with updated prices
     total_value = sum(asset.get('value', 0) for asset in portfolio_data)
     asset_count = len(portfolio_data)
     asset_types = set(asset.get('type') for asset in portfolio_data if asset.get('type'))
