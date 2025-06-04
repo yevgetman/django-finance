@@ -17,6 +17,7 @@ Django Finance is a web application that provides intelligent financial portfoli
 - Cash allocation recommendations
 - All powered by OpenAI's GPT models
 - Persistent conversation threads for continued context
+- Conversational input via dedicated chat parameter
 
 ### 💡 Intelligent Investment Recommendations
 - Actionable recommendations for each asset (Buy, Hold, Sell)
@@ -121,6 +122,7 @@ Analyzes a portfolio and provides AI-powered insights (without recommendations).
 - `portfolio`: Array of assets with their details (required)
 - `cash`: Available cash for investment (optional, default: 0)
 - `investment_goals`: Text description of investment objectives, risk tolerance, time horizon, etc. (optional, default: empty string)
+- `chat`: Conversational context or questions to include in the analysis (optional, default: empty string)
 - `conversation_id`: UUID for continuing a previous conversation (optional)
 
 Example request body:
@@ -143,7 +145,8 @@ Example request body:
     }
   ],
   "cash": 5000,
-  "investment_goals": "Looking to diversify into renewable energy with moderate risk tolerance and a 10-year investment horizon."
+  "investment_goals": "Looking to diversify into renewable energy with moderate risk tolerance and a 10-year investment horizon.",
+  "chat": "I'm particularly interested in clean tech and AI. How should I balance these interests?"
 }
 ```
 
@@ -172,6 +175,7 @@ Provides specific investment recommendations for a portfolio.
 - `portfolio`: Array of assets with their details (required)
 - `cash`: Available cash for investment (optional, default: 0)
 - `investment_goals`: Text description of investment objectives, risk tolerance, time horizon, etc. (optional, default: empty string)
+- `chat`: Conversational context or questions to include in the recommendations (optional, default: empty string)
 - `conversation_id`: UUID for continuing a previous conversation (optional)
 
 Example response:
@@ -220,7 +224,7 @@ The AI integration uses a sophisticated prompt management system found in `portf
 - Configurable model parameters
 - Easy extension for new AI features
 
-### 🔄 Conversation Persistence
+### 🔄 Conversation Persistence and Context
 
 The application supports persistent conversations with the AI for both analysis and recommendations:
 
@@ -229,12 +233,16 @@ The application supports persistent conversations with the AI for both analysis 
 - The AI maintains context from previous interactions within the same conversation
 - Separate conversation threads for analysis and recommendations
 - Leverages OpenAI's thread-based conversation APIs (with fallback to direct completions)
+- Dedicated `chat` parameter allows users to provide conversational context or specific questions
+- Both analysis and recommendations endpoints support the `chat` parameter for consistent user experience
 
-## 🔒 Security
+## 🔒 Security and Debugging
 
 - API keys are stored in environment variables
 - The `.env` file is excluded from version control
 - Django's security features protect against common web vulnerabilities
+- Comprehensive AI debug mode captures full prompt messages (system + user) for all LLM calls
+- Debug information includes timing, token usage, and complete conversation context
 
 ## 📝 Project Structure
 
@@ -260,6 +268,7 @@ The application features a modular prompt management system that:
 2. Formats data for optimal AI understanding
 3. Parses AI responses into structured data
 4. Handles errors gracefully
+5. Incorporates conversational context from user chat input
 
 This system makes it easy to add new AI-powered features by simply defining new prompt templates.
 
