@@ -549,7 +549,12 @@ def get_portfolio_recommendations(request):
                         # Parse quantity - now expecting numeric dollar amounts
                         quantity_part = ''
                         if 'QUANTITY:' in line:
-                            quantity_raw = line.split('QUANTITY:')[1].split(',')[0].strip()
+                            # Extract the substring after 'QUANTITY:' up to either 'REASON:' or the end of the line.
+                            qty_segment = line.split('QUANTITY:')[1]
+                            if 'REASON:' in qty_segment:
+                                qty_segment = qty_segment.split('REASON:')[0]
+                            # Remove any leading/trailing whitespace and a trailing comma, but preserve internal commas
+                            quantity_raw = qty_segment.strip().rstrip(',')
                             # Clean up the quantity value and validate it's numeric
                             quantity_cleaned = quantity_raw.replace('$', '').replace(',', '')
                             try:
