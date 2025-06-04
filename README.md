@@ -21,7 +21,7 @@ Django Finance is a web application that provides intelligent financial portfoli
 
 ### 💡 Intelligent Investment Recommendations
 - Actionable recommendations for each asset (Buy, Hold, Sell)
-- Specific guidance on quantity (All, Some, More)
+- Specific dollar amounts for each BUY or SELL action (use 0 for HOLD)
 - Suggestions for new investments aligned with your goals
 - Recommendations that consider available cash
 - Clear reasoning for each recommendation
@@ -107,9 +107,13 @@ Django Finance is a web application that provides intelligent financial portfoli
 ### Stock Information
 
 ```
-GET /api/stocks/?tickers=AAPL,MSFT,GOOGL
+POST /api/ticker-info/
 ```
-Returns detailed information about the specified stocks.
+Returns sector, market-cap, and classification details for the specified tickers. Send a JSON body such as:
+
+```json
+{"tickers": ["AAPL", "MSFT", "GOOGL"]}
+```
 
 ### Portfolio Analysis
 
@@ -191,19 +195,19 @@ Example response:
     {
       "ticker": "AAPL",
       "action": "HOLD",
-      "quantity": "ALL",
+      "quantity": 0,
       "reason": "Strong performance and growth potential."
     },
     {
       "ticker": "MSFT",
       "action": "BUY",
-      "quantity": "MORE",
+      "quantity": 2500,
       "reason": "Excellent growth trajectory and cloud dominance."
     },
     {
       "ticker": "ICLN",
       "action": "BUY",
-      "quantity": "NEW",
+      "quantity": 5300,
       "reason": "Provides exposure to renewable energy sector aligning with investment goals."
     }
   ],
