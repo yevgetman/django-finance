@@ -266,12 +266,13 @@ def analyze_portfolio(request):
         
         # Record the LLM call for debugging
         analysis_model = os.getenv('OPENAI_MODEL', 'gpt-4o')
+        analysis_prompt_config = get_portfolio_analysis_prompt(portfolio_data, total_value, asset_count, asset_types, cash, investment_goals)
         call_id = debug_collector.record_llm_call(
             model=analysis_model,
             prompt_type="portfolio_analysis_thread",
-            messages=[{"role": "user", "content": message_content}],
-            max_tokens=1000,
-            temperature=0.7
+            messages=analysis_prompt_config['messages'],
+            max_tokens=analysis_prompt_config['max_tokens'],
+            temperature=analysis_prompt_config['temperature'],
         )
         
         # Add the message to the conversation thread
@@ -286,15 +287,6 @@ def analyze_portfolio(request):
         # For direct chat.completions fallback if assistant isn't set up
         if not assistant_id or assistant_id == 'asst_123':
             # Fallback to direct completion API if no assistant configured
-            analysis_prompt_config = get_portfolio_analysis_prompt(
-                portfolio_data, 
-                total_value, 
-                asset_count, 
-                asset_types,
-                cash=cash,
-                investment_goals=investment_goals
-            )
-            
             analysis_response = client.chat.completions.create(
                 model=analysis_model,
                 messages=analysis_prompt_config['messages'],
@@ -422,14 +414,25 @@ def get_portfolio_recommendations(request):
             'recommendations'
         )
         
-        # Record the LLM call for debugging
         recommendations_model = os.getenv('OPENAI_RECOMMENDATIONS_MODEL', 'gpt-4o')
+        
+        # Record the LLM call for debugging using full prompt messages
+        recommendations_prompt_config = get_portfolio_recommendations_prompt(
+            portfolio_data, 
+            total_portfolio_value, 
+            asset_count, 
+            asset_types,
+            analysis="",  # Empty analysis since we're skipping that step
+            cash=cash,
+            investment_goals=investment_goals,
+            chat=chat
+        )
         rec_call_id = debug_collector.record_llm_call(
             model=recommendations_model,
             prompt_type="portfolio_recommendations_thread",
-            messages=[{"role": "user", "content": message_content}],
-            max_tokens=1200,
-            temperature=0.7
+            messages=recommendations_prompt_config['messages'],
+            max_tokens=recommendations_prompt_config['max_tokens'],
+            temperature=recommendations_prompt_config['temperature']
         )
         
         # Add the message to the conversation thread
@@ -444,17 +447,6 @@ def get_portfolio_recommendations(request):
         # For direct chat.completions fallback if assistant isn't set up
         if not assistant_id or assistant_id == 'asst_rec_123':
             # Fallback to direct completion API if no assistant configured
-            recommendations_prompt_config = get_portfolio_recommendations_prompt(
-                portfolio_data, 
-                total_portfolio_value, 
-                asset_count, 
-                asset_types,
-                analysis="",  # Empty analysis since we're skipping that step
-                cash=cash,
-                investment_goals=investment_goals,
-                chat=chat
-            )
-            
             recommendations_response = client.chat.completions.create(
                 model=recommendations_model,
                 messages=recommendations_prompt_config['messages'],
