@@ -10,7 +10,7 @@ import uuid
 from openai import OpenAI
 from .prompts import get_portfolio_analysis_prompt, get_portfolio_recommendations_prompt
 from .ai_debug import create_debug_collector, inject_debug_data
-from .conversation_utils import get_or_create_conversation, format_message_for_thread, add_message_to_thread, get_latest_assistant_message
+from .conversation_utils import get_or_create_conversation, format_message_for_thread, add_message_to_thread, get_latest_assistant_message, run_thread_with_assistant
 import pandas as pd
 import re
 
@@ -626,3 +626,67 @@ def get_portfolio_recommendations(request):
     enhanced_response = inject_debug_data(response_data, debug_collector)
     
     return Response(enhanced_response)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def chat(request):
+    """
+    Dedicated chat endpoint for follow-up on conversation threads.
+    """
+    debug_collector = create_debug_collector()
+    message = request.data.get('message')
+    if not message:
+        return Response({'error': 'Message is required'}, status=status.HTTP_400_BAD_REQUEST)
+    conversation_id = request.data.get('conversation_id')
+    conversation, created = get_or_create_conversation(conversation_id, conversation_type='analysis')
+    # Add user message to thread
+    add_message_to_thread(conversation.openai_thread_id, message)
+    # Prepare for LLM call
+    messages = [{'role': 'user', 'content': message}]
+    assistant_id = os.getenv('OPENAI_ASSISTANT_ID', '')
+    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+    # Record LLM call for debug
+    model = assistant_id or os.getenv('OPENAI_MODEL', 'gpt-4o')
+    prompt_type = 'chat_thread' if assistant_id else 'chat_direct'
+    call_id = debug_collector.record_llm_call(
+        model=model,
+        prompt_type=prompt_type,
+        messages=messages
+    )
+    start_time = time.time()
+    try:
+        if assistant_id:
+            run_thread_with_assistant(conversation.openai_thread_id, assistant_id)
+            assistant_msg = get_latest_assistant_message(conversation.openai_thread_id)
+            content = assistant_msg.get('content') if assistant_msg else ''
+        else:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=messages
+            )
+            content = resp.choices[0].message.content
+            response_tokens = getattr(getattr(resp, 'usage', None), 'total_tokens', None)
+        duration = int((time.time() - start_time) * 1000)
+        # Update debug call with response
+        debug_collector.update_llm_call_response(
+            call_id=call_id,
+            response_content=content,
+            response_tokens=response_tokens,
+            duration_ms=duration
+        )
+    except Exception as e:
+        duration = int((time.time() - start_time) * 1000)
+        debug_collector.update_llm_call_response(
+            call_id=call_id,
+            response_content='',
+            error=str(e),
+            duration_ms=duration
+        )
+        raise
+    # Build and return response with debug data
+    response_data = {
+        'message': content,
+        'conversation_id': str(conversation.id)
+    }
+    enhanced = inject_debug_data(response_data, debug_collector)
+    return Response(enhanced)
