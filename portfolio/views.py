@@ -216,6 +216,7 @@ def analyze_portfolio(request):
     # Get available cash and investment goals
     cash = request.data.get('cash', 0)
     investment_goals = request.data.get('investment_goals', '')
+    chat = request.data.get('chat', '')
     conversation_id = request.data.get('conversation_id')
     
     # Recalculate metrics with updated prices
@@ -241,7 +242,8 @@ def analyze_portfolio(request):
         conversation.last_portfolio_data = {
             'portfolio': portfolio_data,
             'cash': cash,
-            'investment_goals': investment_goals
+            'investment_goals': investment_goals,
+            'chat': chat
         }
         conversation.save(update_fields=['last_portfolio_data'])
     except Exception as e:
@@ -258,6 +260,7 @@ def analyze_portfolio(request):
             total_value,
             cash,
             investment_goals,
+            chat,
             'analysis'
         )
         
@@ -370,6 +373,7 @@ def get_portfolio_recommendations(request):
     # Get available cash and investment goals
     cash = request.data.get('cash', 0)
     investment_goals = request.data.get('investment_goals', '')
+    chat = request.data.get('chat', '')
     conversation_id = request.data.get('conversation_id')
     
     # Recalculate metrics with updated prices
@@ -396,7 +400,8 @@ def get_portfolio_recommendations(request):
         conversation.last_portfolio_data = {
             'portfolio': portfolio_data,
             'cash': cash,
-            'investment_goals': investment_goals
+            'investment_goals': investment_goals,
+            'chat': chat
         }
         conversation.save(update_fields=['last_portfolio_data'])
     except Exception as e:
@@ -413,6 +418,7 @@ def get_portfolio_recommendations(request):
             total_value,
             cash,
             investment_goals,
+            chat,
             'recommendations'
         )
         
@@ -440,12 +446,13 @@ def get_portfolio_recommendations(request):
             # Fallback to direct completion API if no assistant configured
             recommendations_prompt_config = get_portfolio_recommendations_prompt(
                 portfolio_data, 
-                total_value, 
+                total_portfolio_value, 
                 asset_count, 
                 asset_types,
                 analysis="",  # Empty analysis since we're skipping that step
                 cash=cash,
-                investment_goals=investment_goals
+                investment_goals=investment_goals,
+                chat=chat
             )
             
             recommendations_response = client.chat.completions.create(

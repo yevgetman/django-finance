@@ -124,6 +124,9 @@ Based on the portfolio analysis below, provide specific actionable recommendatio
 INVESTMENT GOALS:
 {investment_goals}
 
+CONVERSATION CONTEXT:
+{chat}
+
 PORTFOLIO ANALYSIS:
 {analysis}
 
@@ -272,7 +275,7 @@ def get_portfolio_analysis_prompt(portfolio_data: list, total_value: float,
 def get_portfolio_recommendations_prompt(portfolio_data: list, total_value: float,
                                       asset_count: int, asset_types: set, 
                                       analysis: str, cash: float = 0,
-                                      investment_goals: str = '') -> Dict[str, Any]:
+                                      investment_goals: str = '', chat: str = '') -> Dict[str, Any]:
     """
     Get formatted portfolio recommendations prompt with data injection.
     
@@ -284,6 +287,7 @@ def get_portfolio_recommendations_prompt(portfolio_data: list, total_value: floa
         analysis: Previous AI analysis of the portfolio
         cash: Available cash for investment
         investment_goals: User's investment goals and preferences
+        chat: User's conversational text input for additional context
     
     Returns:
         Dictionary containing messages, max_tokens, and temperature for OpenAI API
@@ -302,7 +306,8 @@ def get_portfolio_recommendations_prompt(portfolio_data: list, total_value: floa
         'messages': prompt_template.get_messages(
             portfolio_summary=portfolio_summary,
             analysis=analysis,
-            investment_goals=investment_goals
+            investment_goals=investment_goals,
+            chat=chat
         ),
         'max_tokens': prompt_template.max_tokens,
         'temperature': prompt_template.temperature

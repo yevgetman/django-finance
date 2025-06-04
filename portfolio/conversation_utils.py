@@ -164,6 +164,7 @@ def format_message_for_thread(
     total_value: float,
     cash: float,
     investment_goals: str,
+    chat: str,
     conversation_type: str
 ) -> str:
     """
@@ -174,6 +175,7 @@ def format_message_for_thread(
         total_value: Total portfolio value
         cash: Available cash
         investment_goals: User's investment goals
+        chat: User's conversational context
         conversation_type: Type of conversation ('analysis' or 'recommendations')
         
     Returns:
@@ -207,6 +209,10 @@ Portfolio Summary:
 
 """
     
+    # Add conversational context if provided
+    if chat:
+        message += f"Conversation Context:\n{chat}\n\n"
+
     message += "Detailed Holdings:\n"
     
     # Add each asset
