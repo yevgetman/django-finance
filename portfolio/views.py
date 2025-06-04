@@ -10,7 +10,7 @@ import uuid
 from openai import OpenAI
 from .prompts import get_portfolio_analysis_prompt, get_portfolio_recommendations_prompt
 from .ai_debug import create_debug_collector, inject_debug_data
-from .conversation_utils import get_or_create_conversation, format_message_for_thread, add_message_to_thread, get_latest_assistant_message, run_thread_with_assistant
+from .conversation_utils import get_or_create_conversation, format_message_for_thread, add_message_to_thread, get_latest_assistant_message, run_thread_with_assistant, get_thread_messages
 import pandas as pd
 import re
 
@@ -638,16 +638,38 @@ def chat(request):
     if not message:
         return Response({'error': 'Message is required'}, status=status.HTTP_400_BAD_REQUEST)
     conversation_id = request.data.get('conversation_id')
-    conversation, created = get_or_create_conversation(conversation_id, conversation_type='analysis')
+    conversation, created = get_or_create_conversation(conversation_id, conversation_type='chat')
     # Add user message to thread
     add_message_to_thread(conversation.openai_thread_id, message)
-    # Prepare for LLM call
-    messages = [{'role': 'user', 'content': message}]
+    # Prepare for LLM call. If using direct chat.completions, include prior context.
+    messages = []
     assistant_id = os.getenv('OPENAI_ASSISTANT_ID', '')
+    if not assistant_id:
+        try:
+            prev_msgs = get_thread_messages(conversation.openai_thread_id)
+            # prev_msgs are newest first; reverse to chronological order
+            for m in reversed(prev_msgs):
+                try:
+                    if isinstance(m.content, list):
+                        # Extract text from the first content part (usually only one)
+                        part = m.content[0]
+                        # Newer SDK : part.text.value ; Older : part.text
+                        text_val = getattr(getattr(part, 'text', ''), 'value', None) or getattr(part, 'text', '')
+                        content_text = text_val if isinstance(text_val, str) else str(text_val)
+                    else:
+                        content_text = str(m.content)
+                except Exception:
+                    content_text = str(m.content)
+                messages.append({'role': m.role, 'content': content_text})
+        except Exception:
+            pass  # fallback to empty context
+    # Append current user message
+    messages.append({'role': 'user', 'content': message})
+    # Prepare for LLM call
     client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
     # Record LLM call for debug
     model = assistant_id or os.getenv('OPENAI_MODEL', 'gpt-4o')
-    prompt_type = 'chat_thread' if assistant_id else 'chat_direct'
+    prompt_type = 'chat_thread' if assistant_id else 'chat_direct_with_context'
     call_id = debug_collector.record_llm_call(
         model=model,
         prompt_type=prompt_type,

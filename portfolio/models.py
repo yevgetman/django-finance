@@ -14,6 +14,7 @@ class Conversation(models.Model):
         choices=[
             ('analysis', 'Portfolio Analysis'),
             ('recommendations', 'Portfolio Recommendations'),
+            ('chat', 'Chat'),
         ],
         default='analysis'
     )
