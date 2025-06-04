@@ -178,14 +178,24 @@ def update_portfolio_with_live_prices(portfolio_data):
             if live_price:
                 updated_asset['current_price'] = float(live_price)
                 
-                # If shares are provided, update the value based on current price
-                if 'shares' in updated_asset and updated_asset.get('shares'):
-                    try:
-                        shares = float(updated_asset.get('shares', 0))
-                        updated_asset['value'] = shares * float(live_price)
-                    except (ValueError, TypeError):
-                        # Keep original value if shares can't be converted to float
-                        pass
+                # Derive missing value or shares using current price
+                try:
+                    price = float(live_price)
+                    shares_present = updated_asset.get('shares') not in (None, "")
+                    value_present = updated_asset.get('value') not in (None, "")
+
+                    # If shares are provided but value is missing or zero, calculate value
+                    if shares_present and not value_present:
+                        shares = float(updated_asset.get('shares'))
+                        updated_asset['value'] = shares * price
+                    # If value is provided but shares are missing or zero, calculate shares
+                    elif value_present and not shares_present:
+                        value = float(updated_asset.get('value'))
+                        if price != 0:
+                            updated_asset['shares'] = value / price
+                except (ValueError, TypeError):
+                    # Skip calculation if conversion fails
+                    pass
                         
                 print(f"Updated {ticker_symbol} with live price: ${live_price}")
         except Exception as e:
