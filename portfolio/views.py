@@ -245,7 +245,8 @@ def analyze_portfolio(request):
     try:
         conversation, created = get_or_create_conversation(
             conversation_id=conversation_id,
-            conversation_type='analysis'
+            conversation_type='analysis',
+            user=request.user
         )
         
         # Update the conversation with the latest portfolio data
@@ -394,7 +395,8 @@ def get_portfolio_recommendations(request):
     try:
         conversation, created = get_or_create_conversation(
             conversation_id=conversation_id,
-            conversation_type='recommendations'
+            conversation_type='recommendations',
+            user=request.user
         )
         
         # Update the conversation with the latest portfolio data
@@ -652,7 +654,11 @@ def chat(request):
     if not message:
         return Response({'error': 'Message is required'}, status=status.HTTP_400_BAD_REQUEST)
     conversation_id = request.data.get('conversation_id')
-    conversation, created = get_or_create_conversation(conversation_id, conversation_type='chat')
+    conversation, created = get_or_create_conversation(
+        conversation_id=conversation_id,
+        conversation_type='chat',
+        user=request.user
+    )
     # Add user message to thread
     add_message_to_thread(conversation.openai_thread_id, message)
     # Prepare for LLM call. If using direct chat.completions, include prior context.

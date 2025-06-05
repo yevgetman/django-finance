@@ -13,7 +13,8 @@ from .models import Conversation
 
 def get_or_create_conversation(
     conversation_id: Optional[str] = None, 
-    conversation_type: str = 'analysis'
+    conversation_type: str = 'analysis',
+    user = None
 ) -> Tuple[Conversation, bool]:
     """
     Get an existing conversation or create a new one.
@@ -21,6 +22,7 @@ def get_or_create_conversation(
     Args:
         conversation_id: UUID of an existing conversation
         conversation_type: Type of conversation ('analysis' or 'recommendations')
+        user: User object to associate with the conversation
         
     Returns:
         Tuple of (Conversation object, boolean indicating if it was created)
@@ -30,8 +32,12 @@ def get_or_create_conversation(
     
     if conversation_id:
         try:
-            # Try to get the existing conversation
-            conversation = Conversation.objects.get(id=conversation_id, is_active=True)
+            # Try to get the existing conversation for this user
+            conversation = Conversation.objects.get(
+                id=conversation_id, 
+                user=user,
+                is_active=True
+            )
             # Verify that the OpenAI thread still exists
             try:
                 client.beta.threads.retrieve(conversation.openai_thread_id)
@@ -49,6 +55,7 @@ def get_or_create_conversation(
     # Create a new conversation thread
     openai_thread = client.beta.threads.create()
     conversation = Conversation.objects.create(
+        user=user,
         openai_thread_id=openai_thread.id,
         conversation_type=conversation_type
     )

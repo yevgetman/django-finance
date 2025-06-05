@@ -48,6 +48,7 @@ class Conversation(models.Model):
     Each conversation represents a single thread of analysis or recommendations.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='conversations')
     openai_thread_id = models.CharField(max_length=255, unique=True)
     conversation_type = models.CharField(
         max_length=20,
