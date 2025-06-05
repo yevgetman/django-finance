@@ -8,6 +8,7 @@ Django Finance is a web application that provides intelligent financial portfoli
 - Real-time stock data fetching from Yahoo Finance
 - Concurrent processing for multiple tickers
 - Comprehensive stock information including market cap, sector, and asset class
+- Auto-derives missing `shares` *or* `value` for each asset using live market prices
 
 ### 🤖 AI-Powered Portfolio Analysis
 - Deep analysis of portfolio composition and balance
@@ -129,6 +130,8 @@ Analyzes a portfolio and provides AI-powered insights (without recommendations).
 - `chat`: Conversational context or questions to include in the analysis (optional, default: empty string)
 - `conversation_id`: UUID for continuing a previous conversation (optional)
 
+**Asset requirements:** Each asset entry must include a `symbol` field and **either** `shares` **or** `value` (dollar amount). If you supply only one, the other will be calculated automatically based on the latest market price.
+
 Example request body:
 ```json
 {
@@ -136,15 +139,11 @@ Example request body:
     {
       "symbol": "AAPL",
       "type": "Stock",
-      "shares": 10,
-      "current_price": 150,
-      "value": 1500
+      "shares": 10
     },
     {
       "symbol": "MSFT",
       "type": "Stock",
-      "shares": 5,
-      "current_price": 300,
       "value": 1500
     }
   ],
@@ -181,6 +180,8 @@ Provides specific investment recommendations for a portfolio.
 - `investment_goals`: Text description of investment objectives, risk tolerance, time horizon, etc. (optional, default: empty string)
 - `chat`: Conversational context or questions to include in the recommendations (optional, default: empty string)
 - `conversation_id`: UUID for continuing a previous conversation (optional)
+
+**Asset requirements:** Each asset entry must include a `symbol` field and **either** `shares` **or** `value`.
 
 Example response:
 ```json
