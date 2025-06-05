@@ -143,12 +143,10 @@ Example request:
 Example response:
 ```json
 {
-  "user_id": "84b27392-2345-4b5b-87ba-d370d005b2b4",
   "email": "user@example.com",
   "first_name": "John",
   "last_name": "Doe",
   "api_key": "YQ52FZMskRJBRiHlt5Rh3W7arwFkcgrqf5rGlL3pQ4rqXviF4sxoBx_ER4GKFo-h",
-  "created_at": "2025-06-05T18:27:39.123456Z",
   "message": "User created successfully"
 }
 ```

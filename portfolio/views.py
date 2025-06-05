@@ -741,10 +741,8 @@ def register_user(request):
     - last_name: User's last name
     
     Returns:
-    - user_id: UUID of the created user
     - email: User's email
     - api_key: Generated API key for authentication
-    - created_at: Timestamp when user was created
     """
     User = get_user_model()
     
@@ -779,12 +777,10 @@ def register_user(request):
         
         # Return user data with API key
         return Response({
-            'user_id': str(user.id),
             'email': user.email,
             'first_name': user.first_name,
             'last_name': user.last_name,
             'api_key': user.api_key,
-            'created_at': user.created_at.isoformat(),
             'message': 'User created successfully'
         }, status=status.HTTP_201_CREATED)
         
