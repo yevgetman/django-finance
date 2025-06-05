@@ -117,6 +117,44 @@ Django Finance is a web application that provides intelligent financial portfoli
 Authorization: ApiKey YOUR_API_KEY_HERE
 ```
 
+### User Registration
+
+```
+POST /api/register/
+```
+**No authentication required** - Creates a new user account and returns an API key for subsequent requests.
+
+**Required Parameters:**
+- `email`: User's email address (used as username)
+
+**Optional Parameters:**
+- `first_name`: User's first name
+- `last_name`: User's last name
+
+Example request:
+```json
+{
+  "email": "user@example.com",
+  "first_name": "John",
+  "last_name": "Doe"
+}
+```
+
+Example response:
+```json
+{
+  "user_id": "84b27392-2345-4b5b-87ba-d370d005b2b4",
+  "email": "user@example.com",
+  "first_name": "John",
+  "last_name": "Doe",
+  "api_key": "YQ52FZMskRJBRiHlt5Rh3W7arwFkcgrqf5rGlL3pQ4rqXviF4sxoBx_ER4GKFo-h",
+  "created_at": "2025-06-05T18:27:39.123456Z",
+  "message": "User created successfully"
+}
+```
+
+**Important:** Store the API key securely as it cannot be retrieved again. Use it in the Authorization header for all subsequent API requests.
+
 ### Stock Information
 
 ```

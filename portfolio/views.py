@@ -1,6 +1,7 @@
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
 import yfinance as yf
 import concurrent.futures
 import os
@@ -12,6 +13,8 @@ from .ai_debug import create_debug_collector, inject_debug_data
 from .conversation_utils import get_or_create_conversation, format_message_for_thread, add_message_to_thread, get_latest_assistant_message, run_thread_with_assistant, get_thread_messages
 import pandas as pd
 import re
+from django.contrib.auth import get_user_model
+from django.db import IntegrityError
 
 def get_ticker_data(ticker):
     """Helper function to get data for a single ticker"""
@@ -639,6 +642,7 @@ def get_portfolio_recommendations(request):
     return Response(enhanced_response)
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def chat(request):
     """
     Dedicated chat endpoint for follow-up on conversation threads.
@@ -722,3 +726,77 @@ def chat(request):
     }
     enhanced = inject_debug_data(response_data, debug_collector)
     return Response(enhanced)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def register_user(request):
+    """
+    Register a new user and return their API key.
+    
+    Required fields:
+    - email: User's email address (used as username)
+    
+    Optional fields:
+    - first_name: User's first name
+    - last_name: User's last name
+    
+    Returns:
+    - user_id: UUID of the created user
+    - email: User's email
+    - api_key: Generated API key for authentication
+    - created_at: Timestamp when user was created
+    """
+    User = get_user_model()
+    
+    # Get email from request data
+    email = request.data.get('email')
+    if not email:
+        return Response(
+            {'error': 'Email is required'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Validate email format (basic validation)
+    if '@' not in email or '.' not in email.split('@')[-1]:
+        return Response(
+            {'error': 'Invalid email format'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Get optional fields
+    first_name = request.data.get('first_name', '')
+    last_name = request.data.get('last_name', '')
+    
+    try:
+        # Create user with email as username
+        user = User.objects.create_user(
+            username=email,
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            is_api_active=True
+        )
+        
+        # Return user data with API key
+        return Response({
+            'user_id': str(user.id),
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'api_key': user.api_key,
+            'created_at': user.created_at.isoformat(),
+            'message': 'User created successfully'
+        }, status=status.HTTP_201_CREATED)
+        
+    except IntegrityError:
+        # User with this email already exists
+        return Response(
+            {'error': 'User with this email already exists'}, 
+            status=status.HTTP_409_CONFLICT
+        )
+    except Exception as e:
+        # Handle any other errors
+        return Response(
+            {'error': f'Failed to create user: {str(e)}'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
