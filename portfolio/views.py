@@ -1,6 +1,5 @@
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.decorators import api_view
 from rest_framework.response import Response
 import yfinance as yf
 import concurrent.futures
@@ -94,7 +93,6 @@ def get_ticker_data(ticker):
         }
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
 def get_ticker_info(request):
     """Get sector and market cap data for a list of tickers"""
     tickers = request.data.get('tickers', [])
@@ -208,7 +206,6 @@ def update_portfolio_with_live_prices(portfolio_data):
 
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
 def analyze_portfolio(request):
     """Analyze a portfolio and provide recommendations"""
     # Initialize AI debug collector
@@ -357,7 +354,6 @@ def analyze_portfolio(request):
 
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
 def get_portfolio_recommendations(request):
     """Get portfolio recommendations directly without analysis step"""
     # Initialize AI debug collector
@@ -643,7 +639,6 @@ def get_portfolio_recommendations(request):
     return Response(enhanced_response)
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
 def chat(request):
     """
     Dedicated chat endpoint for follow-up on conversation threads.

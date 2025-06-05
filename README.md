@@ -4,6 +4,13 @@ Django Finance is a web application that provides intelligent financial portfoli
 
 ## 🌟 Features
 
+### 🔐 API Key Authentication
+- Secure API access using custom API key authentication
+- User accounts with unique API keys for each user
+- No traditional login required - API key based access only
+- Management commands for creating users and managing API keys
+- Automatic tracking of last API access times
+
 ### 📊 Stock Data Retrieval
 - Real-time stock data fetching from Yahoo Finance
 - Concurrent processing for multiple tickers
@@ -104,6 +111,11 @@ Django Finance is a web application that provides intelligent financial portfoli
 3. Access the application at `http://127.0.0.1:8000/`
 
 ## 📡 API Endpoints
+
+**Authentication Required:** All API endpoints require authentication using an API key in the Authorization header:
+```
+Authorization: ApiKey YOUR_API_KEY_HERE
+```
 
 ### Stock Information
 
@@ -215,6 +227,37 @@ Example response:
   "feedback": "Your portfolio shows good exposure to tech but could benefit from diversification into renewable energy given your stated goals. The recommendations aim to maintain your core holdings while adding green energy exposure to align with your 10-year horizon.",
   "conversation_id": "123e4567-e89b-12d3-a456-426614174000"
 }
+
+## 👥 User Management
+
+The application includes management commands for creating and managing API users:
+
+### Create a New User
+```bash
+python manage.py create_api_user username email@example.com --first-name John --last-name Doe
+```
+
+### List All Users
+```bash
+python manage.py list_api_users
+```
+
+### List Only Active Users
+```bash
+python manage.py list_api_users --active-only
+```
+
+### Show Partial API Keys (for debugging)
+```bash
+python manage.py list_api_users --show-keys
+```
+
+### Regenerate API Key for a User
+```bash
+python manage.py regenerate_api_key username
+```
+
+**Important:** API keys are displayed only once when created or regenerated. Store them securely as they cannot be retrieved again.
 
 ## 🧠 AI Integration
 
