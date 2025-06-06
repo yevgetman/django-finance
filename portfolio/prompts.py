@@ -137,13 +137,13 @@ RESPONSE FORMAT:
 You MUST format your response as a structured list of recommendations, with each recommendation strictly following this format:
 
 FOR EXISTING ASSETS:
-- TICKER: AAPL, ACTION: BUY, QUANTITY: 2500, REASON: Strong growth potential and undervalued at current price.
+- TICKER: AAPL, ACTION: BUY, AMOUNT: 2500, COMMENTS: Strong growth potential and undervalued at current price.
 
 FOR NEW INVESTMENTS:
-- TICKER: VTI, ACTION: BUY, QUANTITY: 5000, REASON: Adds broad market exposure and diversification.
+- TICKER: VTI, ACTION: BUY, AMOUNT: 5000, COMMENTS: [NEW ASSET] Adds broad market exposure and diversification.
 
 FOR SELLING ASSETS:
-- TICKER: TSLA, ACTION: SELL, QUANTITY: 1500, REASON: Overvalued and high volatility risk.
+- TICKER: TSLA, ACTION: SELL, AMOUNT: 1500, COMMENTS: Overvalued and high volatility risk.
 
 IMPORTANT INSTRUCTIONS:
 1. Each recommendation MUST start with a dash and appear on its own line
@@ -151,12 +151,12 @@ IMPORTANT INSTRUCTIONS:
 3. For existing assets, use the ticker symbols provided in the portfolio details
 4. For new investments, suggest SPECIFIC ticker symbols (not generic asset classes)
 5. Use ONLY these ACTION values: BUY, HOLD, or SELL
-6. QUANTITY must be a specific dollar amount (e.g., 1000, 2500, 5000) representing the dollar value to buy/sell
-7. For SELL actions, the quantity should not exceed the current value of the holding
+6. AMOUNT must be a specific dollar amount (e.g., 1000, 2500, 5000) representing the dollar value to buy/sell
+7. For SELL actions, the amount should not exceed the current value of the holding
 8. For BUY actions, ensure the total recommended purchases do not exceed available cash
-9. For HOLD actions, use QUANTITY: 0 (no transaction needed)
-10. Include a brief REASON limited to one sentence that aligns with the user's investment goals when applicable
-11. When recommending NEW investments, ensure they align with the user's stated investment goals
+9. For HOLD actions, use AMOUNT: 0 (no transaction needed)
+10. Include brief COMMENTS limited to one sentence that aligns with the user's investment goals when applicable
+11. When recommending NEW investments, ensure they align with the user's stated investment goals and always prefix the COMMENTS with "[NEW ASSET]" to clearly indicate it's a new addition
 12. Take into account the user's available cash when suggesting purchases, and stay within those limits
 13. Be strategic about dollar amounts - consider portfolio balance, risk management, and diversification
 

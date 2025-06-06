@@ -557,36 +557,62 @@ def get_portfolio_recommendations(request):
                         if 'ACTION:' in line:
                             action_part = line.split('ACTION:')[1].split(',')[0].strip()
                         
-                        # Parse quantity - now expecting numeric dollar amounts
-                        quantity_part = ''
-                        if 'QUANTITY:' in line:
-                            # Extract the substring after 'QUANTITY:' up to either 'REASON:' or the end of the line.
-                            qty_segment = line.split('QUANTITY:')[1]
-                            if 'REASON:' in qty_segment:
-                                qty_segment = qty_segment.split('REASON:')[0]
+                        # Parse amount - expecting numeric dollar amounts
+                        amount_part = ''
+                        if 'AMOUNT:' in line:
+                            # Extract the substring after 'AMOUNT:' up to either 'COMMENTS:' or 'REASON:' or the end of the line.
+                            amt_segment = line.split('AMOUNT:')[1]
+                            # Check for COMMENTS: first (new format)
+                            if 'COMMENTS:' in amt_segment:
+                                amt_segment = amt_segment.split('COMMENTS:')[0]
+                            # Backward compatibility with REASON: format
+                            elif 'REASON:' in amt_segment:
+                                amt_segment = amt_segment.split('REASON:')[0]
                             # Remove any leading/trailing whitespace and a trailing comma, but preserve internal commas
-                            quantity_raw = qty_segment.strip().rstrip(',')
-                            # Clean up the quantity value and validate it's numeric
-                            quantity_cleaned = quantity_raw.replace('$', '').replace(',', '')
+                            amount_raw = amt_segment.strip().rstrip(',')
+                            # Clean up the amount value and validate it's numeric
+                            amount_cleaned = amount_raw.replace('$', '').replace(',', '')
                             try:
                                 # Validate that it's a number
-                                float(quantity_cleaned)
-                                quantity_part = quantity_cleaned
+                                amount_part = float(amount_cleaned)
                             except ValueError:
                                 # If not numeric, keep the original value for debugging
-                                quantity_part = quantity_raw
+                                amount_part = amount_raw
+                        # For backward compatibility (during transition period)
+                        elif 'QUANTITY:' in line:
+                            # Extract the substring after 'QUANTITY:' up to either 'COMMENTS:' or 'REASON:' or the end of the line.
+                            qty_segment = line.split('QUANTITY:')[1]
+                            # Check for COMMENTS: first (new format)
+                            if 'COMMENTS:' in qty_segment:
+                                qty_segment = qty_segment.split('COMMENTS:')[0]
+                            # Backward compatibility with REASON: format
+                            elif 'REASON:' in qty_segment:
+                                qty_segment = qty_segment.split('REASON:')[0]
+                            # Remove any leading/trailing whitespace and a trailing comma, but preserve internal commas
+                            amount_raw = qty_segment.strip().rstrip(',')
+                            # Clean up the amount value and validate it's numeric
+                            amount_cleaned = amount_raw.replace('$', '').replace(',', '')
+                            try:
+                                # Validate that it's a number
+                                amount_part = float(amount_cleaned)
+                            except ValueError:
+                                # If not numeric, keep the original value for debugging
+                                amount_part = amount_raw
                         
-                        # Parse reason
-                        reason_part = ''
-                        if 'REASON:' in line:
-                            reason_part = line.split('REASON:')[1].strip()
+                        # Parse comments (formerly reason)
+                        comments_part = ''
+                        if 'COMMENTS:' in line:
+                            comments_part = line.split('COMMENTS:')[1].strip()
+                        # For backward compatibility (during transition period)
+                        elif 'REASON:' in line:
+                            comments_part = line.split('REASON:')[1].strip()
                         
                         # Create structured recommendation with improved data
                         recommendation = {
                             'ticker': ticker,
                             'action': action_part,
-                            'quantity': quantity_part,
-                            'reason': reason_part
+                            'amount': amount_part,
+                            'comments': comments_part
                         }
                         
                         structured_recommendations.append(recommendation)
@@ -595,8 +621,8 @@ def get_portfolio_recommendations(request):
                         structured_recommendations.append({
                             'ticker': 'PARSE_ERROR',
                             'action': 'UNKNOWN',
-                            'quantity': 'UNKNOWN',
-                            'reason': f'Error parsing: {line}'
+                            'amount': 'UNKNOWN',
+                            'comments': f'Error parsing: {line}'
                         })
         
         # If parsing didn't work well, include the raw text
@@ -604,8 +630,8 @@ def get_portfolio_recommendations(request):
             structured_recommendations = [{
                 'ticker': 'RAW_RESPONSE',
                 'action': 'UNKNOWN',
-                'quantity': 'UNKNOWN',
-                'reason': recommendations_text
+                'amount': 'UNKNOWN',
+                'comments': recommendations_text
             }]
             
         ai_recommendations = structured_recommendations
@@ -613,8 +639,8 @@ def get_portfolio_recommendations(request):
         ai_recommendations = [{
             'ticker': 'ERROR',
             'action': 'UNAVAILABLE',
-            'quantity': 'UNKNOWN',
-            'reason': f"Recommendations temporarily unavailable: {str(e)}"
+            'amount': 'UNKNOWN',
+            'comments': f"Recommendations temporarily unavailable: {str(e)}"
         }]
         feedback_text = "Unable to generate feedback due to an error."
         # Update debug collector with error
@@ -709,6 +735,7 @@ def chat(request):
             content = resp.choices[0].message.content
             response_tokens = getattr(getattr(resp, 'usage', None), 'total_tokens', None)
         duration = int((time.time() - start_time) * 1000)
+        
         # Update debug call with response
         debug_collector.update_llm_call_response(
             call_id=call_id,
