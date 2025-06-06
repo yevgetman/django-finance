@@ -210,7 +210,26 @@ def update_portfolio_with_live_prices(portfolio_data):
 
 @api_view(['POST'])
 def analyze_portfolio(request):
-    """Analyze a portfolio and provide recommendations"""
+    """
+    Analyze a portfolio and provide recommendations
+    
+    Expected request format:
+    {
+        "portfolio": [
+            {
+                "symbol": "AAPL",
+                "shares": 10,
+                "value": 1500,
+                "type": "stock",
+                "account": "Trading"  # Optional: account type (e.g., Trading, IRA, 401k)
+            },
+            ...
+        ],
+        "cash": 5000,
+        "investment_goals": "Growth with moderate risk",
+        "conversation_id": "optional-uuid"
+    }
+    """
     # Initialize AI debug collector
     debug_collector = create_debug_collector()
     
@@ -359,7 +378,26 @@ def analyze_portfolio(request):
 
 @api_view(['POST'])
 def get_portfolio_recommendations(request):
-    """Get portfolio recommendations directly without analysis step"""
+    """
+    Get portfolio recommendations directly without analysis step
+    
+    Expected request format:
+    {
+        "portfolio": [
+            {
+                "symbol": "AAPL",
+                "shares": 10,
+                "value": 1500,
+                "type": "stock",
+                "account": "Trading"  # Optional: account type (e.g., Trading, IRA, 401k)
+            },
+            ...
+        ],
+        "cash": 5000,
+        "investment_goals": "Growth with moderate risk",
+        "conversation_id": "optional-uuid"
+    }
+    """
     # Initialize AI debug collector
     debug_collector = create_debug_collector()
     

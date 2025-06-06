@@ -37,7 +37,9 @@ class PromptManager:
         system_message=(
             "You are a professional financial advisor with expertise in portfolio analysis "
             "and investment strategy. Provide detailed, actionable insights based on the "
-            "portfolio data provided."
+            "portfolio data provided. Pay special attention to how assets are distributed across "
+            "different account types (e.g., Trading, IRA, 401k) and consider the appropriate "
+            "investment strategies for each account type."
         ),
         user_template="""
 As a professional financial advisor, analyze the following portfolio and provide detailed insights:
@@ -49,7 +51,8 @@ Please provide:
 2. Risk analysis
 3. Diversification evaluation
 4. Performance insights
-5. Key strengths and weaknesses
+5. Account-specific analysis (if multiple accounts are present)
+6. Key strengths and weaknesses
 
 Keep the analysis professional, concise, and actionable. Focus on portfolio balance, risk management, and growth potential.
         """.strip(),
@@ -115,7 +118,9 @@ Focus on actionable, specific recommendations with clear rationale.
             "You are a professional financial advisor specializing in actionable portfolio recommendations. "
             "Your task is to provide specific buy, sell, or hold recommendations for each asset in "
             "the portfolio, plus suggestions for new investments to improve portfolio balance. "
-            "Consider the user's available cash and investment goals when making recommendations. "
+            "Consider the user's available cash, investment goals, and account types when making recommendations. "
+            "Pay attention to how assets are distributed across different accounts (e.g., Trading, IRA, 401k) "
+            "and ensure your recommendations are appropriate for each account type. "
             "Always provide specific dollar amounts for transactions, not vague quantities."
         ),
         user_template="""
@@ -159,6 +164,9 @@ IMPORTANT INSTRUCTIONS:
 11. When recommending NEW investments, ensure they align with the user's stated investment goals and always prefix the COMMENTS with "[NEW ASSET]" to clearly indicate it's a new addition
 12. Take into account the user's available cash when suggesting purchases, and stay within those limits
 13. Be strategic about dollar amounts - consider portfolio balance, risk management, and diversification
+14. When assets are in different account types (e.g., Trading, IRA, 401k), consider the appropriate investment strategies for each account type
+15. For retirement accounts like IRAs and 401ks, focus on long-term growth and tax advantages
+16. For taxable accounts, consider tax efficiency and shorter-term liquidity needs
 
 You MUST provide a recommendation for EACH existing asset in the portfolio, followed by 2-3 recommendations for NEW investments that would improve portfolio balance and achieve the stated investment goals.
 
@@ -231,8 +239,10 @@ Detailed Holdings:"""
     for asset in portfolio_data:
         # Ensure symbol is prominently displayed at the start
         ticker = asset.get('symbol', 'Unknown')
+        account = asset.get('account', '')
+        account_info = f" | Account: {account}" if account else ""
         portfolio_summary += f"""
-- TICKER: {ticker} | Type: {asset.get('type', 'Unknown')} | Value: ${asset.get('value', 0):,.2f}
+- TICKER: {ticker} | Type: {asset.get('type', 'Unknown')} | Value: ${asset.get('value', 0):,.2f}{account_info}
   Shares: {asset.get('shares', 'N/A')} | Current Price: ${asset.get('current_price', 'N/A')}"""
     
     return portfolio_summary
