@@ -736,6 +736,82 @@ def get_portfolio_recommendations(request):
                 error=str(e)
             )
     
+    # Compute asset flux metrics for response
+    try:
+        net_buys = 0.0
+        net_sells = 0.0
+        # Prepare portfolio mapping symbol -> list of accounts it currently resides in
+        symbol_accounts_map = {}
+        for asset in portfolio_data:
+            sym = asset.get('symbol')
+            acct = asset.get('account', 'Default')
+            if sym:
+                symbol_accounts_map.setdefault(sym, []).append(acct)
+        # Compute BUY / SELL totals and collect MOVE fluxes
+        account_move_aggregates = {}
+        for rec in ai_recommendations:
+            action = str(rec.get('action', '')).upper()
+            # Attempt to coerce amount to float if possible
+            amt_raw = rec.get('amount', 0)
+            try:
+                if isinstance(amt_raw, str):
+                    amt = float(amt_raw.replace('$', '').replace(',', ''))
+                else:
+                    amt = float(amt_raw)
+            except (ValueError, TypeError):
+                amt = 0.0
+            if action == 'BUY':
+                net_buys += amt
+            elif action == 'SELL':
+                net_sells += amt
+            elif action == 'MOVE':
+                target_account = rec.get('account', 'Default')
+                ticker = rec.get('ticker')
+                # Determine source account from current portfolio holdings (first differing account)
+                source_account = None
+                if ticker and ticker in symbol_accounts_map:
+                    for acct in symbol_accounts_map[ticker]:
+                        if acct != target_account:
+                            source_account = acct
+                            break
+                # Fallback if source not determined
+                if not source_account:
+                    source_account = 'Unknown'
+                key = (source_account, target_account)
+                account_move_aggregates[key] = account_move_aggregates.get(key, 0.0) + amt
+        net_cash_flux = round(net_sells - net_buys, 2)
+        asset_flux = {
+            'net_buys': round(net_buys, 2),
+            'net_sells': round(net_sells, 2),
+            'net_cash_flux': net_cash_flux
+        }
+        # Only include net_account_flux if multiple accounts exist and there are MOVE actions
+        if len(set(acct for accts in symbol_accounts_map.values() for acct in accts)) > 1 and account_move_aggregates:
+            # If exactly one pair, use it; else summarise as Various
+            if len(account_move_aggregates) == 1:
+                ((from_acct, to_acct), flux_amt) = next(iter(account_move_aggregates.items()))
+                asset_flux['net_account_flux'] = {
+                    'amount': round(flux_amt, 2),
+                    'from_account': from_acct,
+                    'to_account': to_acct
+                }
+            else:
+                # Summarise total amount moved when multiple directions exist
+                total_move_amt = round(sum(account_move_aggregates.values()), 2)
+                asset_flux['net_account_flux'] = {
+                    'amount': total_move_amt,
+                    'from_account': 'Various',
+                    'to_account': 'Various'
+                }
+    except Exception as e:
+        # In case of any unexpected errors, fall back to zeroed asset_flux
+        asset_flux = {
+            'net_buys': 0,
+            'net_sells': 0,
+            'net_cash_flux': 0,
+            'error': f'Asset flux computation error: {str(e)}'
+        }
+        
     # Group recommendations by account
     recommendations_by_account = {}
     for rec in ai_recommendations:
@@ -755,6 +831,7 @@ def get_portfolio_recommendations(request):
         'recommendations_by_account': recommendations_by_account,
         'recommendations': ai_recommendations,  # Keep original format for backward compatibility
         'feedback': feedback_text,
+        'asset_flux': asset_flux,
         'conversation_id': str(conversation.id)
     }
     
