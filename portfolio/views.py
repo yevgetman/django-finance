@@ -481,7 +481,7 @@ def get_portfolio_recommendations(request):
             prompt_type="portfolio_recommendations_thread",
             messages=recommendations_prompt_config['messages'],
             max_tokens=recommendations_prompt_config['max_tokens'],
-            temperature=recommendations_prompt_config['temperature']
+            temperature=recommendations_prompt_config['temperature'],
         )
         
         # Add the message to the conversation thread
@@ -691,6 +691,34 @@ def get_portfolio_recommendations(request):
             }]
             
         ai_recommendations = structured_recommendations
+        
+        # Validation: Ensure MOVE actions do not exceed existing holdings
+        if structured_recommendations:
+            # Build a mapping of current holdings value by ticker
+            holdings_value = {}
+            for asset in portfolio_data:
+                sym = asset.get('symbol')
+                val = asset.get('value', 0)
+                holdings_value[sym] = holdings_value.get(sym, 0) + (val or 0)
+            
+            for rec in structured_recommendations:
+                try:
+                    if rec.get('action', '').upper() == 'MOVE':
+                        amt = rec.get('amount', 0)
+                        if isinstance(amt, str):
+                            amt = float(str(amt).replace('$', '').replace(',', '') or 0)
+                        ticker_sym = rec.get('ticker')
+                        max_allowed = holdings_value.get(ticker_sym, 0)
+                        if max_allowed <= 0:
+                            # No existing holding, set to 0
+                            rec['amount'] = 0
+                            rec['comments'] = f"[ADJUSTED] No existing position in {ticker_sym}; amount set to 0. " + rec.get('comments', '')
+                        elif amt > max_allowed:
+                            rec['amount'] = max_allowed
+                            rec['comments'] = f"[ADJUSTED] Move amount reduced to current holding (${max_allowed}). " + rec.get('comments', '')
+                except Exception:
+                    pass
+        
     except Exception as e:
         ai_recommendations = [{
             'ticker': 'ERROR',

@@ -116,7 +116,7 @@ Focus on actionable, specific recommendations with clear rationale.
     PORTFOLIO_RECOMMENDATIONS = PromptTemplate(
         system_message=(
             "You are a professional financial advisor specializing in actionable portfolio recommendations. "
-            "Your task is to provide specific buy, sell, or hold recommendations for each asset in "
+            "Your task is to provide specific buy, sell, hold, or move recommendations for each asset in "
             "the portfolio, plus suggestions for new investments to improve portfolio balance. "
             "Consider the user's available cash, investment goals, and account types when making recommendations. "
             "Pay attention to how assets are distributed across different accounts (e.g., Trading, IRA, 401k) "
@@ -154,29 +154,33 @@ FOR NEW INVESTMENTS:
 FOR SELLING ASSETS:
 - TICKER: TSLA, ACTION: SELL, AMOUNT: 1500, ACCOUNT: Default, COMMENTS: Overvalued and high volatility risk.
 
+FOR MOVING ASSETS:
+- TICKER: IVV, ACTION: MOVE, AMOUNT: 300, ACCOUNT: IRA, COMMENTS: Move $300 of IVV to IRA.
+
 IMPORTANT INSTRUCTIONS:
 1. Each recommendation MUST start with a dash and appear on its own line
 2. You MUST include the EXACT ticker symbol for each asset (do not leave TICKER blank or use placeholders)
 3. For existing assets, use the ticker symbols provided in the portfolio details
 4. For new investments, suggest SPECIFIC ticker symbols (not generic asset classes)
-5. Use ONLY these ACTION values: BUY, HOLD, or SELL
-6. AMOUNT must be a specific dollar amount (e.g., 1000, 2500, 5000) representing the dollar value to buy/sell
+5. Use ONLY these ACTION values: BUY, HOLD, SELL, or MOVE
+6. AMOUNT must be a specific dollar amount (e.g., 1000, 2500, 5000) representing the dollar value to buy/sell/move
 7. For SELL actions, the amount should not exceed the current value of the holding
-8. For BUY actions, ensure the total recommended purchases do not exceed available cash
-9. For HOLD actions, use AMOUNT: 0 (no transaction needed)
-10. Include brief COMMENTS limited to one sentence that aligns with the user's investment goals when applicable
-11. When recommending NEW investments, ensure they align with the user's stated investment goals and always prefix the COMMENTS with "[NEW ASSET]" to clearly indicate it's a new addition
-12. Take into account the user's available cash when suggesting purchases, and stay within those limits
-13. Be strategic about dollar amounts - consider portfolio balance, risk management, and diversification
-14. Group recommendations by account type with a header "## ACCOUNT: [ACCOUNT NAME]"
-15. For assets without an account designation, group them under "## ACCOUNT: Default"
-16. Include the ACCOUNT field in each recommendation line to clearly indicate which account it belongs to
-17. When assets are in different account types (e.g., Trading, IRA, 401k), consider the appropriate investment strategies for each account type
-18. For retirement accounts like IRAs and 401ks, focus on long-term growth and tax advantages
-19. For taxable accounts, consider tax efficiency and shorter-term liquidity needs
-20. New investment recommendations should be placed under the most appropriate account type
+8. For MOVE actions, ensure the amount does not exceed the current value of the holding and specify the target ACCOUNT field
+9. For BUY actions, ensure the total recommended purchases do not exceed available cash
+10. For HOLD actions, use AMOUNT: 0 (no transaction needed)
+11. Include brief COMMENTS limited to one sentence that aligns with the user's investment goals when applicable
+12. When recommending NEW investments, ensure they align with the user's stated investment goals and always prefix the COMMENTS with "[NEW ASSET]" to clearly indicate it's a new addition
+13. Take into account the user's available cash when suggesting purchases, and stay within those limits
+14. Be strategic about dollar amounts - consider portfolio balance, risk management, and diversification
+15. Group recommendations by account type with a header "## ACCOUNT: [ACCOUNT NAME]"
+16. For assets without an account designation, group them under "## ACCOUNT: Default"
+17. Include the ACCOUNT field in each recommendation line to clearly indicate which account it belongs to
+18. When assets are in different account types (e.g., Trading, IRA, 401k), consider the appropriate investment strategies for each account type
+19. For retirement accounts like IRAs and 401ks, focus on long-term growth and tax advantages
+20. For taxable accounts, consider tax efficiency and shorter-term liquidity needs
+21. New investment recommendations should be placed under the most appropriate account type
 
-You MUST provide a recommendation for EACH existing asset in the portfolio, followed by 2-3 recommendations for NEW investments that would improve portfolio balance and achieve the stated investment goals.
+You MUST provide a recommendation for EACH existing asset in the portfolio, followed by as many recommendations for NEW investments as you deem to be necessary to improve portfolio balance and achieve the stated investment goals as long as they do not exceed available cash.
 
 AFTER your recommendations, provide a section titled "FEEDBACK:" that contains your overall assessment, rationale, and strategic thinking behind your recommendations. This should include:
 1. A summary of the current portfolio's strengths and weaknesses
