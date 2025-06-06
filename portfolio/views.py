@@ -598,10 +598,13 @@ def get_portfolio_recommendations(request):
                         # Parse amount - expecting numeric dollar amounts
                         amount_part = ''
                         if 'AMOUNT:' in line:
-                            # Extract the substring after 'AMOUNT:' up to either 'COMMENTS:' or 'REASON:' or the end of the line.
+                            # Extract the substring after 'AMOUNT:' up to either 'ACCOUNT:', 'COMMENTS:' or 'REASON:' or the end of the line.
                             amt_segment = line.split('AMOUNT:')[1]
-                            # Check for COMMENTS: first (new format)
-                            if 'COMMENTS:' in amt_segment:
+                            # Check for ACCOUNT: first (new format with account)
+                            if 'ACCOUNT:' in amt_segment:
+                                amt_segment = amt_segment.split('ACCOUNT:')[0]
+                            # Check for COMMENTS: next (new format)
+                            elif 'COMMENTS:' in amt_segment:
                                 amt_segment = amt_segment.split('COMMENTS:')[0]
                             # Backward compatibility with REASON: format
                             elif 'REASON:' in amt_segment:
@@ -618,10 +621,13 @@ def get_portfolio_recommendations(request):
                                 amount_part = amount_raw
                         # For backward compatibility (during transition period)
                         elif 'QUANTITY:' in line:
-                            # Extract the substring after 'QUANTITY:' up to either 'COMMENTS:' or 'REASON:' or the end of the line.
+                            # Extract the substring after 'QUANTITY:' up to either 'ACCOUNT:', 'COMMENTS:' or 'REASON:' or the end of the line.
                             qty_segment = line.split('QUANTITY:')[1]
-                            # Check for COMMENTS: first (new format)
-                            if 'COMMENTS:' in qty_segment:
+                            # Check for ACCOUNT: first (new format with account)
+                            if 'ACCOUNT:' in qty_segment:
+                                qty_segment = qty_segment.split('ACCOUNT:')[0]
+                            # Check for COMMENTS: next (new format)
+                            elif 'COMMENTS:' in qty_segment:
                                 qty_segment = qty_segment.split('COMMENTS:')[0]
                             # Backward compatibility with REASON: format
                             elif 'REASON:' in qty_segment:
@@ -637,6 +643,15 @@ def get_portfolio_recommendations(request):
                                 # If not numeric, keep the original value for debugging
                                 amount_part = amount_raw
                         
+                        # Parse account information
+                        account_part = 'Default'  # Default account if not specified
+                        if 'ACCOUNT:' in line:
+                            account_segment = line.split('ACCOUNT:')[1]
+                            if ',' in account_segment:
+                                account_part = account_segment.split(',')[0].strip()
+                            else:
+                                account_part = account_segment.strip()
+                        
                         # Parse comments (formerly reason)
                         comments_part = ''
                         if 'COMMENTS:' in line:
@@ -650,6 +665,7 @@ def get_portfolio_recommendations(request):
                             'ticker': ticker,
                             'action': action_part,
                             'amount': amount_part,
+                            'account': account_part,
                             'comments': comments_part
                         }
                         
@@ -660,6 +676,7 @@ def get_portfolio_recommendations(request):
                             'ticker': 'PARSE_ERROR',
                             'action': 'UNKNOWN',
                             'amount': 'UNKNOWN',
+                            'account': 'Default',
                             'comments': f'Error parsing: {line}'
                         })
         
@@ -669,6 +686,7 @@ def get_portfolio_recommendations(request):
                 'ticker': 'RAW_RESPONSE',
                 'action': 'UNKNOWN',
                 'amount': 'UNKNOWN',
+                'account': 'Default',
                 'comments': recommendations_text
             }]
             
@@ -678,6 +696,7 @@ def get_portfolio_recommendations(request):
             'ticker': 'ERROR',
             'action': 'UNAVAILABLE',
             'amount': 'UNKNOWN',
+            'account': 'Default',
             'comments': f"Recommendations temporarily unavailable: {str(e)}"
         }]
         feedback_text = "Unable to generate feedback due to an error."
@@ -689,6 +708,14 @@ def get_portfolio_recommendations(request):
                 error=str(e)
             )
     
+    # Group recommendations by account
+    recommendations_by_account = {}
+    for rec in ai_recommendations:
+        account = rec.get('account', 'Default')
+        if account not in recommendations_by_account:
+            recommendations_by_account[account] = []
+        recommendations_by_account[account].append(rec)
+    
     # Portfolio recommendations response
     response_data = {
         'total_value': total_value,
@@ -697,7 +724,8 @@ def get_portfolio_recommendations(request):
         'asset_count': asset_count,
         'asset_types': list(asset_types),
         'investment_goals': investment_goals,
-        'recommendations': ai_recommendations,
+        'recommendations_by_account': recommendations_by_account,
+        'recommendations': ai_recommendations,  # Keep original format for backward compatibility
         'feedback': feedback_text,
         'conversation_id': str(conversation.id)
     }

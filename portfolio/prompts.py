@@ -121,7 +121,9 @@ Focus on actionable, specific recommendations with clear rationale.
             "Consider the user's available cash, investment goals, and account types when making recommendations. "
             "Pay attention to how assets are distributed across different accounts (e.g., Trading, IRA, 401k) "
             "and ensure your recommendations are appropriate for each account type. "
-            "Always provide specific dollar amounts for transactions, not vague quantities."
+            "Always provide specific dollar amounts for transactions, not vague quantities. "
+            "Group your recommendations by account type, treating assets without an account designation "
+            "as belonging to a 'Default' account."
         ),
         user_template="""
 Based on the portfolio analysis below, provide specific actionable recommendations for each asset in this portfolio.
@@ -139,16 +141,18 @@ PORTFOLIO DETAILS:
 {portfolio_summary}
 
 RESPONSE FORMAT:
-You MUST format your response as a structured list of recommendations, with each recommendation strictly following this format:
+You MUST format your response as a structured list of recommendations grouped by account, with each recommendation strictly following this format:
+
+## ACCOUNT: [ACCOUNT NAME]
 
 FOR EXISTING ASSETS:
-- TICKER: AAPL, ACTION: BUY, AMOUNT: 2500, COMMENTS: Strong growth potential and undervalued at current price.
+- TICKER: AAPL, ACTION: BUY, AMOUNT: 2500, ACCOUNT: Trading, COMMENTS: Strong growth potential and undervalued at current price.
 
 FOR NEW INVESTMENTS:
-- TICKER: VTI, ACTION: BUY, AMOUNT: 5000, COMMENTS: [NEW ASSET] Adds broad market exposure and diversification.
+- TICKER: VTI, ACTION: BUY, AMOUNT: 5000, ACCOUNT: IRA, COMMENTS: [NEW ASSET] Adds broad market exposure and diversification.
 
 FOR SELLING ASSETS:
-- TICKER: TSLA, ACTION: SELL, AMOUNT: 1500, COMMENTS: Overvalued and high volatility risk.
+- TICKER: TSLA, ACTION: SELL, AMOUNT: 1500, ACCOUNT: Default, COMMENTS: Overvalued and high volatility risk.
 
 IMPORTANT INSTRUCTIONS:
 1. Each recommendation MUST start with a dash and appear on its own line
@@ -164,9 +168,13 @@ IMPORTANT INSTRUCTIONS:
 11. When recommending NEW investments, ensure they align with the user's stated investment goals and always prefix the COMMENTS with "[NEW ASSET]" to clearly indicate it's a new addition
 12. Take into account the user's available cash when suggesting purchases, and stay within those limits
 13. Be strategic about dollar amounts - consider portfolio balance, risk management, and diversification
-14. When assets are in different account types (e.g., Trading, IRA, 401k), consider the appropriate investment strategies for each account type
-15. For retirement accounts like IRAs and 401ks, focus on long-term growth and tax advantages
-16. For taxable accounts, consider tax efficiency and shorter-term liquidity needs
+14. Group recommendations by account type with a header "## ACCOUNT: [ACCOUNT NAME]"
+15. For assets without an account designation, group them under "## ACCOUNT: Default"
+16. Include the ACCOUNT field in each recommendation line to clearly indicate which account it belongs to
+17. When assets are in different account types (e.g., Trading, IRA, 401k), consider the appropriate investment strategies for each account type
+18. For retirement accounts like IRAs and 401ks, focus on long-term growth and tax advantages
+19. For taxable accounts, consider tax efficiency and shorter-term liquidity needs
+20. New investment recommendations should be placed under the most appropriate account type
 
 You MUST provide a recommendation for EACH existing asset in the portfolio, followed by 2-3 recommendations for NEW investments that would improve portfolio balance and achieve the stated investment goals.
 

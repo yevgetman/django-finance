@@ -178,7 +178,7 @@ Analyzes a portfolio and provides AI-powered insights (without recommendations).
 - `chat`: Conversational context or questions to include in the analysis (optional, default: empty string)
 - `conversation_id`: UUID for continuing a previous conversation (optional)
 
-**Asset requirements:** Each asset entry must include a `symbol` field and **either** `shares` **or** `value` (dollar amount). If you supply only one, the other will be calculated automatically based on the latest market price.
+**Asset requirements:** Each asset entry must include a `symbol` field and **either** `shares` **or** `value` (dollar amount). If you supply only one, the other will be calculated automatically based on the latest market price. You can optionally include an `account` field to specify which account the asset belongs to (e.g., "Trading", "IRA", "401k").
 
 Example request body:
 ```json
@@ -187,12 +187,20 @@ Example request body:
     {
       "symbol": "AAPL",
       "type": "Stock",
-      "shares": 10
+      "shares": 10,
+      "account": "Trading"
     },
     {
       "symbol": "MSFT",
       "type": "Stock",
-      "value": 1500
+      "value": 1500,
+      "account": "IRA"
+    },
+    {
+      "symbol": "VTI",
+      "type": "ETF",
+      "shares": 5
+      // No account specified will use "Default" account
     }
   ],
   "cash": 5000,
@@ -244,22 +252,54 @@ Example response:
     {
       "ticker": "AAPL",
       "action": "HOLD",
-      "quantity": 0,
-      "reason": "Strong performance and growth potential."
+      "amount": 0,
+      "account": "Trading",
+      "comments": "Strong performance and growth potential."
     },
     {
       "ticker": "MSFT",
       "action": "BUY",
-      "quantity": 2500,
-      "reason": "Excellent growth trajectory and cloud dominance."
+      "amount": 2500,
+      "account": "IRA",
+      "comments": "Excellent growth trajectory and cloud dominance."
     },
     {
       "ticker": "ICLN",
       "action": "BUY",
-      "quantity": 5300,
-      "reason": "Provides exposure to renewable energy sector aligning with investment goals."
+      "amount": 5300,
+      "account": "Default",
+      "comments": "[NEW ASSET] Provides exposure to renewable energy sector aligning with investment goals."
     }
   ],
+  "recommendations_by_account": {
+    "Trading": [
+      {
+        "ticker": "AAPL",
+        "action": "HOLD",
+        "amount": 0,
+        "account": "Trading",
+        "comments": "Strong performance and growth potential."
+      }
+    ],
+    "IRA": [
+      {
+        "ticker": "MSFT",
+        "action": "BUY",
+        "amount": 2500,
+        "account": "IRA",
+        "comments": "Excellent growth trajectory and cloud dominance."
+      }
+    ],
+    "Default": [
+      {
+        "ticker": "ICLN",
+        "action": "BUY",
+        "amount": 5300,
+        "account": "Default",
+        "comments": "[NEW ASSET] Provides exposure to renewable energy sector aligning with investment goals."
+      }
+    ]
+  },
   "feedback": "Your portfolio shows good exposure to tech but could benefit from diversification into renewable energy given your stated goals. The recommendations aim to maintain your core holdings while adding green energy exposure to align with your 10-year horizon.",
   "conversation_id": "123e4567-e89b-12d3-a456-426614174000"
 }
@@ -355,6 +395,25 @@ The application features a modular prompt management system that:
 5. Incorporates conversational context from user chat input
 
 This system makes it easy to add new AI-powered features by simply defining new prompt templates.
+
+## 🆕 Recent Updates
+
+### Account-Based Portfolio Recommendations
+- Added support for account-specific investment recommendations (Trading, IRA, 401k, etc.)
+- Portfolio assets can now include an optional `account` field to specify which account they belong to
+- Recommendations are grouped by account in the response under a new `recommendations_by_account` key
+- Assets without an explicit account are assigned to a "Default" account
+- The AI considers account types when generating tailored investment advice
+
+### Terminology Improvements
+- Changed response field from `quantity` to `amount` to clearly indicate dollar values rather than share quantities
+- Changed response field from `reason` to `comments` for more intuitive terminology
+- Added `[NEW ASSET]` prefix to comments for new investment recommendations for clearer differentiation
+
+### Response Format Enhancements
+- Converted the `amount` field from string to numeric (float) type
+- Improved parsing logic to properly separate amount values from comments
+- Maintained backward compatibility with legacy field names during transition
 
 ## 🤝 Contributing
 
