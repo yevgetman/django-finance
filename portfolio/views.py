@@ -247,7 +247,7 @@ def update_portfolio_with_live_prices(portfolio_data):
 @api_view(['POST'])
 def analyze_portfolio(request):
     """
-    Analyze a portfolio and provide recommendations
+    Analyze a portfolio and provide AI-powered insights
     
     Expected request format:
     {
@@ -264,6 +264,8 @@ def analyze_portfolio(request):
         "investment_goals": "Growth with moderate risk",
         "conversation_id": "optional-uuid"
     }
+    
+    Note: The 'type' field is automatically derived from yfinance data and no longer needs to be specified.
     """
     # Initialize AI debug collector
     debug_collector = create_debug_collector()
