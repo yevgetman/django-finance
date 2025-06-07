@@ -45,3 +45,6 @@ db.sqlite3-journal
 # OS
 .DS_Store
 Thumbs.db
+
+# Note to self
+note-to-self.txt

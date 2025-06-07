@@ -32,6 +32,7 @@ Django Finance is a web application that provides intelligent financial portfoli
 - Specific dollar amounts for each BUY or SELL action (use 0 for HOLD)
 - Suggestions for new investments aligned with your goals
 - Recommendations that consider available cash
+- **Monthly recurring investment recommendations** based on regular cash contributions
 - Clear reasoning for each recommendation
 - Dedicated feedback section explaining the rationale behind recommendations
 - Separate API endpoint for targeted recommendations
@@ -228,16 +229,41 @@ Example response:
 ```
 POST /api/recommendations/
 ```
-Provides specific investment recommendations for a portfolio.
+Provides specific investment recommendations for a portfolio, including monthly recurring investment plans.
 
 **Parameters:**
 - `portfolio`: Array of assets with their details (required)
 - `cash`: Available cash for investment (optional, default: 0)
+- `monthly_cash`: Monthly cash contribution amount for recurring investments (optional, default: 0)
 - `investment_goals`: Text description of investment objectives, risk tolerance, time horizon, etc. (optional, default: empty string)
 - `chat`: Conversational context or questions to include in the recommendations (optional, default: empty string)
 - `conversation_id`: UUID for continuing a previous conversation (optional)
 
 **Asset requirements:** Each asset entry must include a `symbol` field and **either** `shares` **or** `value`.
+
+Example request body:
+```json
+{
+  "portfolio": [
+    {
+      "symbol": "AAPL",
+      "type": "Stock",
+      "shares": 10,
+      "account": "Trading"
+    },
+    {
+      "symbol": "MSFT",
+      "type": "Stock",
+      "value": 1500,
+      "account": "IRA"
+    }
+  ],
+  "cash": 5000,
+  "monthly_cash": 500,
+  "investment_goals": "Looking to diversify into renewable energy with moderate risk tolerance and a 10-year investment horizon.",
+  "chat": "I can invest $500 monthly. How should I allocate this?"
+}
+```
 
 Example response:
 ```json
@@ -300,9 +326,53 @@ Example response:
       }
     ]
   },
-  "feedback": "Your portfolio shows good exposure to tech but could benefit from diversification into renewable energy given your stated goals. The recommendations aim to maintain your core holdings while adding green energy exposure to align with your 10-year horizon.",
+  "recurrent_investements": [
+    {
+      "ticker": "VTI",
+      "action": "BUY",
+      "amount": 200,
+      "account": "Default",
+      "comments": "Monthly allocation to broad market index for diversification."
+    },
+    {
+      "ticker": "ICLN",
+      "action": "BUY",
+      "amount": 300,
+      "account": "Default",
+      "comments": "Monthly investment in clean energy to build position over time."
+    }
+  ],
+  "feedback": "Your portfolio shows good exposure to tech but could benefit from diversification into renewable energy given your stated goals. The recommendations aim to maintain your core holdings while adding green energy exposure to align with your 10-year horizon. The monthly $500 allocation focuses on building diversified positions gradually.",
   "conversation_id": "123e4567-e89b-12d3-a456-426614174000"
 }
+```
+
+### Chat Continuation
+
+```
+POST /api/chat/
+```
+Dedicated endpoint for follow-up conversations and questions related to previous analysis or recommendations.
+
+**Parameters:**
+- `message`: The chat message or question (required)
+- `conversation_id`: UUID of the conversation to continue (optional)
+
+Example request:
+```json
+{
+  "message": "What if I want to be more aggressive with my investments?",
+  "conversation_id": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+Example response:
+```json
+{
+  "response": "For a more aggressive approach, you could increase your allocation to growth stocks and emerging sectors like AI and clean tech. Consider reducing your bond allocation and increasing exposure to small-cap growth funds...",
+  "conversation_id": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
 
 ## 👥 User Management
 
@@ -398,12 +468,25 @@ This system makes it easy to add new AI-powered features by simply defining new 
 
 ## 🆕 Recent Updates
 
+### Monthly Recurring Investment Recommendations
+- Added `monthly_cash` parameter to the recommendations endpoint for regular monthly contributions
+- New `recurrent_investements` response field containing AI-generated monthly allocation recommendations
+- Separate recurring investment logic that considers monthly cash flow for building positions over time
+- Monthly recommendations are BUY-only actions that align with investment goals and portfolio strategy
+- AI can recommend leaving some monthly cash uninvested or allocated to cash/treasuries when appropriate
+
 ### Account-Based Portfolio Recommendations
 - Added support for account-specific investment recommendations (Trading, IRA, 401k, etc.)
 - Portfolio assets can now include an optional `account` field to specify which account they belong to
 - Recommendations are grouped by account in the response under a new `recommendations_by_account` key
 - Assets without an explicit account are assigned to a "Default" account
 - The AI considers account types when generating tailored investment advice
+
+### Enhanced Conversation Support
+- Added dedicated `/api/chat/` endpoint for follow-up conversations
+- Persistent conversation threads across analysis, recommendations, and chat endpoints
+- Improved context retention for more coherent multi-turn interactions
+- Support for conversational questions via the `chat` parameter in all endpoints
 
 ### Terminology Improvements
 - Changed response field from `quantity` to `amount` to clearly indicate dollar values rather than share quantities
@@ -414,6 +497,7 @@ This system makes it easy to add new AI-powered features by simply defining new 
 - Converted the `amount` field from string to numeric (float) type
 - Improved parsing logic to properly separate amount values from comments
 - Maintained backward compatibility with legacy field names during transition
+- Enhanced feedback section with more detailed strategic explanations
 
 ## 🤝 Contributing
 
