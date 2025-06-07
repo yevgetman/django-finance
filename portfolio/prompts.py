@@ -118,18 +118,22 @@ Focus on actionable, specific recommendations with clear rationale.
             "You are a professional financial advisor specializing in actionable portfolio recommendations. "
             "Your task is to provide specific buy, sell, hold, or move recommendations for each asset in "
             "the portfolio, plus suggestions for new investments to improve portfolio balance. "
-            "Consider the user's available cash, investment goals, and account types when making recommendations. "
+            "Consider the user's available cash, MONTHLY CASH FLOW, investment goals, and account types when making recommendations. "
             "Pay attention to how assets are distributed across different accounts (e.g., Trading, IRA, 401k) "
             "and ensure your recommendations are appropriate for each account type. "
             "Always provide specific dollar amounts for transactions, not vague quantities. "
             "Group your recommendations by account type, treating assets without an account designation "
-            "as belonging to a 'Default' account."
+            "as belonging to a 'Default' account. "
+            "In addition, devise a recurring monthly investment plan that makes strategic use of the user's available monthly_cash."
         ),
         user_template="""
 Based on the portfolio analysis below, provide specific actionable recommendations for each asset in this portfolio.
 
 INVESTMENT GOALS:
 {investment_goals}
+
+MONTHLY CASH AVAILABLE FOR INVESTMENT:
+{monthly_cash}
 
 CONVERSATION CONTEXT:
 {chat}
@@ -180,9 +184,23 @@ IMPORTANT INSTRUCTIONS:
 20. For taxable accounts, consider tax efficiency and shorter-term liquidity needs
 21. New investment recommendations should be placed under the most appropriate account type
 
-You MUST provide a recommendation for EACH existing asset in the portfolio, followed by as many recommendations for NEW investments as you deem to be necessary to improve portfolio balance and achieve the stated investment goals as long as they do not exceed available cash.
+NEW REQUIREMENT – MONTHLY ALLOCATION PLAN:
+After the account-based recommendations above, provide a separate section titled "## RECURRING INVESTMENTS (Monthly Allocation)". In that section:
+* ONLY list BUY recommendations for how to allocate the {monthly_cash} amount EACH MONTH.
+* The combined AMOUNT values in this section MUST NOT EXCEED {monthly_cash}.
+* It is acceptable to leave a portion unallocated; in that case, include a line with TICKER: CASH to reflect the amount held in cash, or a treasury ETF (e.g., BIL, SHV) if recommending treasury bills.
+* Follow the exact same dash-delimited structured format as other recommendations but omit the ACCOUNT field (assume "Default") unless you specifically want it in another account.
 
-AFTER your recommendations, provide a section titled "FEEDBACK:" that contains your overall assessment, rationale, and strategic thinking behind your recommendations. This should include:
+Example recurring investments section (illustrative):
+
+## RECURRING INVESTMENTS (Monthly Allocation)
+- TICKER: VOO, ACTION: BUY, AMOUNT: 400, COMMENTS: Low-cost S&P 500 exposure.
+- TICKER: ICLN, ACTION: BUY, AMOUNT: 150, COMMENTS: Diversify into clean energy.
+- TICKER: CASH, ACTION: BUY, AMOUNT: 250, COMMENTS: Keep cash reserve for future opportunities.
+
+You MUST include this recurring investments section.
+
+AFTER all recommendations and recurring investments, provide a section titled "FEEDBACK:" that contains your overall assessment, rationale, and strategic thinking behind your recommendations. This should include:
 1. A summary of the current portfolio's strengths and weaknesses
 2. The high-level strategy behind your recommendations
 3. How your recommendations align with the user's investment goals
@@ -297,7 +315,8 @@ def get_portfolio_analysis_prompt(portfolio_data: list, total_value: float,
 def get_portfolio_recommendations_prompt(portfolio_data: list, total_value: float,
                                       asset_count: int, asset_types: set, 
                                       analysis: str, cash: float = 0,
-                                      investment_goals: str = '', chat: str = '') -> Dict[str, Any]:
+                                      investment_goals: str = '', chat: str = '',
+                                      monthly_cash: float = 0) -> Dict[str, Any]:
     """
     Get formatted portfolio recommendations prompt with data injection.
     
@@ -310,6 +329,7 @@ def get_portfolio_recommendations_prompt(portfolio_data: list, total_value: floa
         cash: Available cash for investment
         investment_goals: User's investment goals and preferences
         chat: User's conversational text input for additional context
+        monthly_cash: Monthly cash available for investment
     
     Returns:
         Dictionary containing messages, max_tokens, and temperature for OpenAI API
@@ -329,7 +349,8 @@ def get_portfolio_recommendations_prompt(portfolio_data: list, total_value: floa
             portfolio_summary=portfolio_summary,
             analysis=analysis,
             investment_goals=investment_goals,
-            chat=chat
+            chat=chat,
+            monthly_cash=monthly_cash
         ),
         'max_tokens': prompt_template.max_tokens,
         'temperature': prompt_template.temperature

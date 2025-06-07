@@ -395,6 +395,7 @@ def get_portfolio_recommendations(request):
         ],
         "cash": 5000,
         "investment_goals": "Growth with moderate risk",
+        "monthly_cash": 500,  # New optional monthly contribution
         "conversation_id": "optional-uuid"
     }
     """
@@ -412,6 +413,7 @@ def get_portfolio_recommendations(request):
     
     # Get available cash and investment goals
     cash = request.data.get('cash', 0)
+    monthly_cash = request.data.get('monthly_cash', 0)
     investment_goals = request.data.get('investment_goals', '')
     chat = request.data.get('chat', '')
     conversation_id = request.data.get('conversation_id')
@@ -474,7 +476,8 @@ def get_portfolio_recommendations(request):
             analysis="",  # Empty analysis since we're skipping that step
             cash=cash,
             investment_goals=investment_goals,
-            chat=chat
+            chat=chat,
+            monthly_cash=monthly_cash
         )
         rec_call_id = debug_collector.record_llm_call(
             model=recommendations_model,
@@ -553,125 +556,157 @@ def get_portfolio_recommendations(request):
             print("No feedback section found")
             return ""
         
-        # Initialize variables for recommendations and feedback
+        # Initialize variables for recommendations, recurring investments, and feedback
         structured_recommendations = []
-        feedback_text = "" # Default empty feedback in case extraction fails
+        recurrent_investments = []
+        feedback_text = ""  # Default empty feedback in case extraction fails
         
         if recommendations_text:
             # Extract feedback section
             feedback_text = extract_feedback(recommendations_text)
             
             # Process recommendations (lines starting with dash)
-            for line in recommendations_text.split('\n'):
-                # Skip empty lines and only process recommendation lines (starting with dash)
-                if line.strip() and line.strip().startswith('-'):
-                    # Remove the dash and trim
-                    line = line[1:].strip()
+            in_recurring_section = False
+            
+            for raw_line in recommendations_text.split('\n'):
+                line = raw_line.rstrip()
+                # Detect section headers
+                if line.strip().lower().startswith('##'):
+                    header_text = line.lower()
+                    if 'recurring investment' in header_text:
+                        in_recurring_section = True
+                        continue  # Skip header line itself
+                    else:
+                        # If we encounter another header, exit recurring section
+                        in_recurring_section = False
+                        continue
+                
+                # Skip empty lines
+                if not line.strip():
+                    continue
+                
+                # Only process recommendation lines (starting with dash)
+                if not line.strip().startswith('-'):
+                    continue
+                # Remove the dash and trim
+                line = line[1:].strip()
+                
+                try:
+                    # Improved parsing for structured format
+                    # Look for explicit labels and handle different formatting possibilities
                     
-                    try:
-                        # Improved parsing for structured format
-                        # Look for explicit labels and handle different formatting possibilities
+                    # Parse ticker - try multiple formats and ensure it's not empty
+                    ticker = ''
+                    if 'TICKER:' in line:
+                        ticker_part = line.split('TICKER:')[1].split(',')[0].strip()
+                        ticker = ticker_part.replace('[', '').replace(']', '')
+                    elif 'Symbol:' in line:
+                        ticker_part = line.split('Symbol:')[1].split(',')[0].strip()
+                        ticker = ticker_part.replace('[', '').replace(']', '')
                     
-                        # Parse ticker - try multiple formats and ensure it's not empty
-                        ticker = ''
-                        if 'TICKER:' in line:
-                            ticker_part = line.split('TICKER:')[1].split(',')[0].strip()
-                            ticker = ticker_part.replace('[', '').replace(']', '')
-                        elif 'Symbol:' in line:
-                            ticker_part = line.split('Symbol:')[1].split(',')[0].strip()
-                            ticker = ticker_part.replace('[', '').replace(']', '')
-                        
-                        # If we still don't have a ticker but have a symbol in the portfolio data, try to match
-                        if not ticker and 'ACTION:' in line and 'QUANTITY:' in line:
-                            for asset in portfolio_data:
-                                asset_symbol = asset.get('symbol', '')
-                                # If this recommendation seems to match an existing asset
-                                if asset_symbol and asset_symbol in line:
-                                    ticker = asset_symbol
-                                    break
-                        
-                        # Parse action
-                        action_part = ''
-                        if 'ACTION:' in line:
-                            action_part = line.split('ACTION:')[1].split(',')[0].strip()
-                        
-                        # Parse amount - expecting numeric dollar amounts
-                        amount_part = ''
-                        if 'AMOUNT:' in line:
-                            # Extract the substring after 'AMOUNT:' up to either 'ACCOUNT:', 'COMMENTS:' or 'REASON:' or the end of the line.
-                            amt_segment = line.split('AMOUNT:')[1]
-                            # Check for ACCOUNT: first (new format with account)
-                            if 'ACCOUNT:' in amt_segment:
-                                amt_segment = amt_segment.split('ACCOUNT:')[0]
-                            # Check for COMMENTS: next (new format)
-                            elif 'COMMENTS:' in amt_segment:
-                                amt_segment = amt_segment.split('COMMENTS:')[0]
-                            # Backward compatibility with REASON: format
-                            elif 'REASON:' in amt_segment:
-                                amt_segment = amt_segment.split('REASON:')[0]
-                            # Remove any leading/trailing whitespace and a trailing comma, but preserve internal commas
-                            amount_raw = amt_segment.strip().rstrip(',')
-                            # Clean up the amount value and validate it's numeric
-                            amount_cleaned = amount_raw.replace('$', '').replace(',', '')
-                            try:
-                                # Validate that it's a number
-                                amount_part = float(amount_cleaned)
-                            except ValueError:
-                                # If not numeric, keep the original value for debugging
-                                amount_part = amount_raw
-                        # For backward compatibility (during transition period)
-                        elif 'QUANTITY:' in line:
-                            # Extract the substring after 'QUANTITY:' up to either 'ACCOUNT:', 'COMMENTS:' or 'REASON:' or the end of the line.
-                            qty_segment = line.split('QUANTITY:')[1]
-                            # Check for ACCOUNT: first (new format with account)
-                            if 'ACCOUNT:' in qty_segment:
-                                qty_segment = qty_segment.split('ACCOUNT:')[0]
-                            # Check for COMMENTS: next (new format)
-                            elif 'COMMENTS:' in qty_segment:
-                                qty_segment = qty_segment.split('COMMENTS:')[0]
-                            # Backward compatibility with REASON: format
-                            elif 'REASON:' in qty_segment:
-                                qty_segment = qty_segment.split('REASON:')[0]
-                            # Remove any leading/trailing whitespace and a trailing comma, but preserve internal commas
-                            amount_raw = qty_segment.strip().rstrip(',')
-                            # Clean up the amount value and validate it's numeric
-                            amount_cleaned = amount_raw.replace('$', '').replace(',', '')
-                            try:
-                                # Validate that it's a number
-                                amount_part = float(amount_cleaned)
-                            except ValueError:
-                                # If not numeric, keep the original value for debugging
-                                amount_part = amount_raw
-                        
-                        # Parse account information
-                        account_part = 'Default'  # Default account if not specified
-                        if 'ACCOUNT:' in line:
-                            account_segment = line.split('ACCOUNT:')[1]
-                            if ',' in account_segment:
-                                account_part = account_segment.split(',')[0].strip()
-                            else:
-                                account_part = account_segment.strip()
-                        
-                        # Parse comments (formerly reason)
-                        comments_part = ''
-                        if 'COMMENTS:' in line:
-                            comments_part = line.split('COMMENTS:')[1].strip()
-                        # For backward compatibility (during transition period)
-                        elif 'REASON:' in line:
-                            comments_part = line.split('REASON:')[1].strip()
-                        
-                        # Create structured recommendation with improved data
-                        recommendation = {
-                            'ticker': ticker,
-                            'action': action_part,
-                            'amount': amount_part,
-                            'account': account_part,
-                            'comments': comments_part
-                        }
-                        
+                    # If we still don't have a ticker but have a symbol in the portfolio data, try to match
+                    if not ticker and 'ACTION:' in line and 'QUANTITY:' in line:
+                        for asset in portfolio_data:
+                            asset_symbol = asset.get('symbol', '')
+                            # If this recommendation seems to match an existing asset
+                            if asset_symbol and asset_symbol in line:
+                                ticker = asset_symbol
+                                break
+                    
+                    # Parse action
+                    action_part = ''
+                    if 'ACTION:' in line:
+                        action_part = line.split('ACTION:')[1].split(',')[0].strip()
+                    
+                    # Parse amount - expecting numeric dollar amounts
+                    amount_part = ''
+                    if 'AMOUNT:' in line:
+                        # Extract the substring after 'AMOUNT:' up to either 'ACCOUNT:', 'COMMENTS:' or 'REASON:' or the end of the line.
+                        amt_segment = line.split('AMOUNT:')[1]
+                        # Check for ACCOUNT: first (new format with account)
+                        if 'ACCOUNT:' in amt_segment:
+                            amt_segment = amt_segment.split('ACCOUNT:')[0]
+                        # Check for COMMENTS: next (new format)
+                        elif 'COMMENTS:' in amt_segment:
+                            amt_segment = amt_segment.split('COMMENTS:')[0]
+                        # Backward compatibility with REASON: format
+                        elif 'REASON:' in amt_segment:
+                            amt_segment = amt_segment.split('REASON:')[0]
+                        # Remove any leading/trailing whitespace and a trailing comma, but preserve internal commas
+                        amount_raw = amt_segment.strip().rstrip(',')
+                        # Clean up the amount value and validate it's numeric
+                        amount_cleaned = amount_raw.replace('$', '').replace(',', '')
+                        try:
+                            # Validate that it's a number
+                            amount_part = float(amount_cleaned)
+                        except ValueError:
+                            # If not numeric, keep the original value for debugging
+                            amount_part = amount_raw
+                    # For backward compatibility (during transition period)
+                    elif 'QUANTITY:' in line:
+                        # Extract the substring after 'QUANTITY:' up to either 'ACCOUNT:', 'COMMENTS:' or 'REASON:' or the end of the line.
+                        qty_segment = line.split('QUANTITY:')[1]
+                        # Check for ACCOUNT: first (new format with account)
+                        if 'ACCOUNT:' in qty_segment:
+                            qty_segment = qty_segment.split('ACCOUNT:')[0]
+                        # Check for COMMENTS: next (new format)
+                        elif 'COMMENTS:' in qty_segment:
+                            qty_segment = qty_segment.split('COMMENTS:')[0]
+                        # Backward compatibility with REASON: format
+                        elif 'REASON:' in qty_segment:
+                            qty_segment = qty_segment.split('REASON:')[0]
+                        # Remove any leading/trailing whitespace and a trailing comma, but preserve internal commas
+                        amount_raw = qty_segment.strip().rstrip(',')
+                        # Clean up the amount value and validate it's numeric
+                        amount_cleaned = amount_raw.replace('$', '').replace(',', '')
+                        try:
+                            # Validate that it's a number
+                            amount_part = float(amount_cleaned)
+                        except ValueError:
+                            # If not numeric, keep the original value for debugging
+                            amount_part = amount_raw
+                    
+                    # Parse account information
+                    account_part = 'Default'  # Default account if not specified
+                    if 'ACCOUNT:' in line:
+                        account_segment = line.split('ACCOUNT:')[1]
+                        if ',' in account_segment:
+                            account_part = account_segment.split(',')[0].strip()
+                        else:
+                            account_part = account_segment.strip()
+                    
+                    # Parse comments (formerly reason)
+                    comments_part = ''
+                    if 'COMMENTS:' in line:
+                        comments_part = line.split('COMMENTS:')[1].strip()
+                    # For backward compatibility (during transition period)
+                    elif 'REASON:' in line:
+                        comments_part = line.split('REASON:')[1].strip()
+                    
+                    # Create structured recommendation with improved data
+                    recommendation = {
+                        'ticker': ticker,
+                        'action': action_part,
+                        'amount': amount_part,
+                        'account': account_part,
+                        'comments': comments_part
+                    }
+                    
+                    if in_recurring_section:
+                        recurrent_investments.append(recommendation)
+                    else:
                         structured_recommendations.append(recommendation)
-                    except Exception as e:
-                        # If parsing fails, include the raw line
+                except Exception as e:
+                    # If parsing fails, include the raw line
+                    if in_recurring_section:
+                        recurrent_investments.append({
+                            'ticker': 'PARSE_ERROR',
+                            'action': 'UNKNOWN',
+                            'amount': 'UNKNOWN',
+                            'account': 'Default',
+                            'comments': f'Error parsing: {line}'
+                        })
+                    else:
                         structured_recommendations.append({
                             'ticker': 'PARSE_ERROR',
                             'action': 'UNKNOWN',
@@ -689,6 +724,9 @@ def get_portfolio_recommendations(request):
                 'account': 'Default',
                 'comments': recommendations_text
             }]
+        # Ensure recurrent_investments list exists even if parsing fails
+        if not recurrent_investments:
+            recurrent_investments = []
             
         ai_recommendations = structured_recommendations
         
@@ -830,6 +868,7 @@ def get_portfolio_recommendations(request):
         'investment_goals': investment_goals,
         'recommendations_by_account': recommendations_by_account,
         'recommendations': ai_recommendations,  # Keep original format for backward compatibility
+        'recurrent_investements': recurrent_investments,
         'feedback': feedback_text,
         'asset_flux': asset_flux,
         'conversation_id': str(conversation.id)
