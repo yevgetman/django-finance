@@ -15,6 +15,7 @@ Django Finance is a web application that provides intelligent financial portfoli
 - Real-time stock data fetching from Yahoo Finance
 - Concurrent processing for multiple tickers
 - Comprehensive stock information including market cap, sector, and asset class
+- **Automatic asset type derivation** from yfinance data (ETF, Stock, Mutual Fund, etc.)
 - Auto-derives missing `shares` *or* `value` for each asset using live market prices
 
 ### 🤖 AI-Powered Portfolio Analysis
@@ -179,7 +180,7 @@ Analyzes a portfolio and provides AI-powered insights (without recommendations).
 - `chat`: Conversational context or questions to include in the analysis (optional, default: empty string)
 - `conversation_id`: UUID for continuing a previous conversation (optional)
 
-**Asset requirements:** Each asset entry must include a `symbol` field and **either** `shares` **or** `value` (dollar amount). If you supply only one, the other will be calculated automatically based on the latest market price. You can optionally include an `account` field to specify which account the asset belongs to (e.g., "Trading", "IRA", "401k").
+**Asset requirements:** Each asset entry must include a `symbol` field and **either** `shares` **or** `value` (dollar amount). If you supply only one, the other will be calculated automatically based on the latest market price. You can optionally include an `account` field to specify which account the asset belongs to (e.g., "Trading", "IRA", "401k"). The `type` field is **automatically derived** from yfinance data and no longer needs to be specified.
 
 Example request body:
 ```json
@@ -187,19 +188,16 @@ Example request body:
   "portfolio": [
     {
       "symbol": "AAPL",
-      "type": "Stock",
       "shares": 10,
       "account": "Trading"
     },
     {
       "symbol": "MSFT",
-      "type": "Stock",
       "value": 1500,
       "account": "IRA"
     },
     {
       "symbol": "VTI",
-      "type": "ETF",
       "shares": 5
       // No account specified will use "Default" account
     }
@@ -239,7 +237,7 @@ Provides specific investment recommendations for a portfolio, including monthly 
 - `chat`: Conversational context or questions to include in the recommendations (optional, default: empty string)
 - `conversation_id`: UUID for continuing a previous conversation (optional)
 
-**Asset requirements:** Each asset entry must include a `symbol` field and **either** `shares` **or** `value`.
+**Asset requirements:** Each asset entry must include a `symbol` field and **either** `shares` **or** `value`. The `type` field is **automatically derived** from yfinance data.
 
 Example request body:
 ```json
@@ -247,13 +245,11 @@ Example request body:
   "portfolio": [
     {
       "symbol": "AAPL",
-      "type": "Stock",
       "shares": 10,
       "account": "Trading"
     },
     {
       "symbol": "MSFT",
-      "type": "Stock",
       "value": 1500,
       "account": "IRA"
     }
@@ -467,6 +463,13 @@ The application features a modular prompt management system that:
 This system makes it easy to add new AI-powered features by simply defining new prompt templates.
 
 ## 🆕 Recent Updates
+
+### Automatic Asset Type Detection
+- **Deprecated manual `type` parameter** - asset types are now automatically derived from yfinance data
+- Supports detection of: ETF, Stock, Mutual Fund, Crypto, Index, Currency, and more
+- Fallback logic ensures all assets have a valid type classification
+- More accurate asset classification using real-time market data
+- Eliminates manual entry errors and keeps asset types up-to-date
 
 ### Monthly Recurring Investment Recommendations
 - Added `monthly_cash` parameter to the recommendations endpoint for regular monthly contributions

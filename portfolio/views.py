@@ -131,13 +131,13 @@ def get_ticker_info(request):
 
 def update_portfolio_with_live_prices(portfolio_data):
     """
-    Update portfolio data with live stock prices from yfinance.
+    Update portfolio data with live stock prices from yfinance and derive asset types.
     
     Args:
         portfolio_data: List of portfolio assets
         
     Returns:
-        Updated portfolio data with current prices and recalculated values
+        Updated portfolio data with current prices, recalculated values, and derived asset types
     """
     # Create a copy of the portfolio data to avoid modifying the original
     updated_portfolio = []
@@ -156,6 +156,9 @@ def update_portfolio_with_live_prices(portfolio_data):
         try:
             # Fetch live price data from yfinance
             ticker_obj = yf.Ticker(ticker_symbol)
+            
+            # Get ticker info for asset type derivation
+            info = ticker_obj.info
             
             # Get the latest price information
             live_price = None
@@ -197,11 +200,44 @@ def update_portfolio_with_live_prices(portfolio_data):
                 except (ValueError, TypeError):
                     # Skip calculation if conversion fails
                     pass
+            
+            # Derive asset type from yfinance data
+            try:
+                quote_type = info.get('quoteType', '').lower()
+                
+                # Map yfinance quote types to our asset types
+                if quote_type == 'etf':
+                    updated_asset['type'] = 'ETF'
+                elif quote_type == 'mutualfund':
+                    updated_asset['type'] = 'Mutual Fund'
+                elif quote_type in ['equity', 'stock']:
+                    updated_asset['type'] = 'Stock'
+                elif quote_type == 'cryptocurrency':
+                    updated_asset['type'] = 'Crypto'
+                elif quote_type == 'index':
+                    updated_asset['type'] = 'Index'
+                elif quote_type == 'currency':
+                    updated_asset['type'] = 'Currency'
+                else:
+                    # Fallback: try to determine from other info fields
+                    if 'fund' in info.get('longName', '').lower() or 'etf' in info.get('longName', '').lower():
+                        updated_asset['type'] = 'ETF'
+                    else:
+                        updated_asset['type'] = 'Stock'  # Default fallback
                         
-                print(f"Updated {ticker_symbol} with live price: ${live_price}")
+                print(f"Updated {ticker_symbol} with live price: ${live_price}, type: {updated_asset['type']}")
+            except Exception as e:
+                # If type derivation fails, use existing type or default to 'Stock'
+                if 'type' not in updated_asset:
+                    updated_asset['type'] = 'Stock'
+                print(f"Could not derive type for {ticker_symbol}, using: {updated_asset['type']}")
+                        
         except Exception as e:
             # If there's an error fetching the price, log it and keep the existing data
             print(f"Error fetching data for {ticker_symbol}: {str(e)}")
+            # Ensure type exists even if fetching fails
+            if 'type' not in updated_asset:
+                updated_asset['type'] = 'Stock'  # Default fallback
             
         updated_portfolio.append(updated_asset)
     
@@ -220,7 +256,6 @@ def analyze_portfolio(request):
                 "symbol": "AAPL",
                 "shares": 10,
                 "value": 1500,
-                "type": "stock",
                 "account": "Trading"  # Optional: account type (e.g., Trading, IRA, 401k)
             },
             ...
@@ -379,7 +414,7 @@ def analyze_portfolio(request):
 @api_view(['POST'])
 def get_portfolio_recommendations(request):
     """
-    Get portfolio recommendations directly without analysis step
+    Get portfolio recommendations from AI model
     
     Expected request format:
     {
@@ -388,7 +423,6 @@ def get_portfolio_recommendations(request):
                 "symbol": "AAPL",
                 "shares": 10,
                 "value": 1500,
-                "type": "stock",
                 "account": "Trading"  # Optional: account type (e.g., Trading, IRA, 401k)
             },
             ...
@@ -398,6 +432,8 @@ def get_portfolio_recommendations(request):
         "monthly_cash": 500,  # New optional monthly contribution
         "conversation_id": "optional-uuid"
     }
+    
+    Note: The 'type' field is automatically derived from yfinance data and no longer needs to be specified.
     """
     # Initialize AI debug collector
     debug_collector = create_debug_collector()
