@@ -7,7 +7,7 @@ import concurrent.futures
 import os
 import time
 import uuid
-from openai import OpenAI
+from .ai_providers import AIRequestManager
 from .prompts import get_portfolio_analysis_prompt, get_portfolio_recommendations_prompt
 from .ai_debug import create_debug_collector, inject_debug_data
 from .conversation_utils import get_or_create_conversation, format_message_for_thread, add_message_to_thread, get_latest_assistant_message, run_thread_with_assistant, get_thread_messages
@@ -210,7 +210,7 @@ def update_portfolio_with_live_prices(portfolio_data):
                     updated_asset['type'] = 'ETF'
                 elif quote_type == 'mutualfund':
                     updated_asset['type'] = 'Mutual Fund'
-                elif quote_type in ['equity', 'stock']:
+                elif quote_type in ('equity', 'stock'):
                     updated_asset['type'] = 'Stock'
                 elif quote_type == 'cryptocurrency':
                     updated_asset['type'] = 'Crypto'
@@ -281,6 +281,12 @@ def analyze_portfolio(request):
     
     # Get available cash and investment goals
     cash = request.data.get('cash', 0)
+    # Ensure cash is numeric
+    try:
+        cash = float(cash) if cash else 0
+    except (ValueError, TypeError):
+        cash = 0
+        
     investment_goals = request.data.get('investment_goals', '')
     chat = request.data.get('chat', '')
     conversation_id = request.data.get('conversation_id')
@@ -293,9 +299,8 @@ def analyze_portfolio(request):
     # Total portfolio value including cash
     total_portfolio_value = total_value + cash
     
-    # Create OpenAI client
-    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-    ai_analysis = "Analysis unavailable"
+    # Create AI request manager
+    ai_manager = AIRequestManager()
     
     # Get or create a conversation thread
     try:
@@ -320,80 +325,68 @@ def analyze_portfolio(request):
         conversation = type('obj', (object,), {'id': 'temp-' + str(uuid.uuid4())})
     
     # Step 1: Generate AI-powered analysis using conversation thread
+    call_id = None  # Initialize call_id to ensure it's always defined
     try:
-        # Format portfolio data as a message for the thread
+        # Format the message for the conversation thread
         message_content = format_message_for_thread(
-            portfolio_data,
-            total_value,
-            cash,
-            investment_goals,
-            chat,
+            portfolio_data, 
+            total_value, 
+            cash, 
+            investment_goals, 
+            chat, 
             'analysis'
         )
         
         # Record the LLM call for debugging
-        analysis_model = os.getenv('OPENAI_MODEL', 'gpt-4o')
         analysis_prompt_config = get_portfolio_analysis_prompt(portfolio_data, total_value, asset_count, asset_types, cash, investment_goals)
         call_id = debug_collector.record_llm_call(
-            model=analysis_model,
-            prompt_type="portfolio_analysis_thread",
-            messages=analysis_prompt_config['messages'],
-            max_tokens=analysis_prompt_config['max_tokens'],
-            temperature=analysis_prompt_config['temperature'],
+            model="analysis_provider",
+            prompt_type="portfolio_analysis",
+            messages=analysis_prompt_config['messages']
         )
         
-        # Add the message to the conversation thread
-        start_time = time.time()
+        start_time = time.time()  # Initialize start_time for duration tracking
         
-        # Add message to thread
-        add_message_to_thread(conversation.openai_thread_id, message_content)
+        # Check if we should use OpenAI assistants or direct API
+        assistant_id = os.getenv('OPENAI_ASSISTANT_ID', '')
         
-        # Run the assistant on the thread
-        assistant_id = os.getenv('OPENAI_ASSISTANT_ID', 'asst_123')  # Replace with actual assistant ID
-        
-        # For direct chat.completions fallback if assistant isn't set up
-        if not assistant_id or assistant_id == 'asst_123':
-            # Fallback to direct completion API if no assistant configured
-            analysis_response = client.chat.completions.create(
-                model=analysis_model,
+        if assistant_id and hasattr(conversation, 'openai_thread_id'):
+            # Use OpenAI assistants API (only works with OpenAI)
+            add_message_to_thread(conversation.openai_thread_id, message_content)
+            run_thread_with_assistant(conversation.openai_thread_id, assistant_id)
+            assistant_message = get_latest_assistant_message(conversation.openai_thread_id)
+            ai_analysis = assistant_message.content[0].text.value if assistant_message else "Analysis unavailable"
+        else:
+            # Use direct AI provider API (works with both OpenAI and Anthropic)
+            ai_response = AIRequestManager.make_request(
+                endpoint_type='analysis',
                 messages=analysis_prompt_config['messages'],
                 max_tokens=analysis_prompt_config['max_tokens'],
                 temperature=analysis_prompt_config['temperature']
             )
-            ai_analysis = analysis_response.choices[0].message.content
-        else:
-            from .conversation_utils import run_thread_with_assistant
-            # Run assistant on the thread
-            run_thread_with_assistant(conversation.openai_thread_id, assistant_id)
             
-            # Get the latest assistant response
-            assistant_message = get_latest_assistant_message(conversation.openai_thread_id)
-            if assistant_message:
-                ai_analysis = assistant_message.content[0].text.value
+            if ai_response['success']:
+                ai_analysis = ai_response['content']
             else:
-                ai_analysis = "No analysis available from the conversation."
+                ai_analysis = f"Analysis unavailable: {ai_response['error']}"
         
-        duration_ms = int((time.time() - start_time) * 1000)
-        
-        # Update debug collector with response data
+        # Record the completion for debugging
         debug_collector.update_llm_call_response(
-            call_id=call_id,
-            response_content=ai_analysis,
-            response_tokens=None,  # Token count not available from thread API
-            duration_ms=duration_ms
+            call_id,
+            response_content=str(ai_analysis),
+            duration_ms=int((time.time() - start_time) * 1000)
         )
         
-    except Exception as e:
-        ai_analysis = f"AI analysis temporarily unavailable: {str(e)}"
-        # Update debug collector with error
-        if 'call_id' in locals():
+    except Exception as error:
+        # Record the error for debugging
+        if call_id is not None:
             debug_collector.update_llm_call_response(
-                call_id=call_id,
-                response_content="",
-                error=str(e)
+                call_id,
+                response_content=None,
+                error=str(error),
+                duration_ms=int((time.time() - start_time) * 1000)
             )
-    
-    # Removed the recommendations part as it's now a separate endpoint
+        ai_analysis = f"Analysis error: {str(error)}"
     
     # Portfolio analysis response
     analysis = {
@@ -451,7 +444,19 @@ def get_portfolio_recommendations(request):
     
     # Get available cash and investment goals
     cash = request.data.get('cash', 0)
+    # Ensure cash is numeric
+    try:
+        cash = float(cash) if cash else 0
+    except (ValueError, TypeError):
+        cash = 0
+        
     monthly_cash = request.data.get('monthly_cash', 0)
+    # Ensure monthly_cash is numeric
+    try:
+        monthly_cash = float(monthly_cash) if monthly_cash else 0
+    except (ValueError, TypeError):
+        monthly_cash = 0
+        
     investment_goals = request.data.get('investment_goals', '')
     chat = request.data.get('chat', '')
     conversation_id = request.data.get('conversation_id')
@@ -464,8 +469,8 @@ def get_portfolio_recommendations(request):
     # Total portfolio value including cash
     total_portfolio_value = total_value + cash
     
-    # Create OpenAI client
-    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+    # Create AI request manager
+    ai_manager = AIRequestManager()
     ai_recommendations = []
     feedback_text = ""
     
@@ -491,9 +496,10 @@ def get_portfolio_recommendations(request):
         print(f"Error creating conversation: {str(e)}")
         conversation = type('obj', (object,), {'id': 'temp-' + str(uuid.uuid4())})
     
-    # Generate recommendations using conversation thread
+    # Step 1: Generate AI-powered recommendations using conversation thread
+    call_id = None  # Initialize call_id to ensure it's always defined
     try:
-        # Format portfolio data as a message for the thread
+        # Format the message for the conversation thread
         message_content = format_message_for_thread(
             portfolio_data,
             total_value,
@@ -503,121 +509,114 @@ def get_portfolio_recommendations(request):
             'recommendations'
         )
         
-        recommendations_model = os.getenv('OPENAI_RECOMMENDATIONS_MODEL', 'gpt-4o')
-        
         # Record the LLM call for debugging using full prompt messages
         recommendations_prompt_config = get_portfolio_recommendations_prompt(
             portfolio_data, 
-            total_portfolio_value, 
+            total_value, 
             asset_count, 
-            asset_types,
-            analysis="",  # Empty analysis since we're skipping that step
-            cash=cash,
-            investment_goals=investment_goals,
-            chat=chat,
-            monthly_cash=monthly_cash
-        )
-        rec_call_id = debug_collector.record_llm_call(
-            model=recommendations_model,
-            prompt_type="portfolio_recommendations_thread",
-            messages=recommendations_prompt_config['messages'],
-            max_tokens=recommendations_prompt_config['max_tokens'],
-            temperature=recommendations_prompt_config['temperature'],
+            asset_types, 
+            cash, 
+            investment_goals,
+            monthly_cash
         )
         
-        # Add the message to the conversation thread
-        start_time = time.time()
+        call_id = debug_collector.record_llm_call(
+            model="recommendations_provider",
+            prompt_type="portfolio_recommendations",
+            messages=recommendations_prompt_config['messages']
+        )
         
-        # Add message to thread
-        add_message_to_thread(conversation.openai_thread_id, message_content)
+        start_time = time.time()  # Initialize start_time for duration tracking
         
-        # Run the assistant on the thread
-        assistant_id = os.getenv('OPENAI_RECOMMENDATIONS_ASSISTANT_ID', 'asst_rec_123')  # Replace with actual assistant ID
+        # Check if we should use OpenAI assistants or direct API
+        assistant_id = os.getenv('OPENAI_RECOMMENDATIONS_ASSISTANT_ID', '')
         
-        # For direct chat.completions fallback if assistant isn't set up
-        if not assistant_id or assistant_id == 'asst_rec_123':
-            # Fallback to direct completion API if no assistant configured
-            recommendations_response = client.chat.completions.create(
-                model=recommendations_model,
+        if assistant_id and hasattr(conversation, 'openai_thread_id'):
+            # Use OpenAI assistants API (only works with OpenAI)
+            add_message_to_thread(conversation.openai_thread_id, message_content)
+            run_thread_with_assistant(conversation.openai_thread_id, assistant_id)
+            assistant_message = get_latest_assistant_message(conversation.openai_thread_id)
+            ai_recommendations_text = assistant_message.content[0].text.value if assistant_message else "Recommendations unavailable"
+        else:
+            # Use direct AI provider API (works with both OpenAI and Anthropic)
+            ai_response = AIRequestManager.make_request(
+                endpoint_type='recommendations',
                 messages=recommendations_prompt_config['messages'],
                 max_tokens=recommendations_prompt_config['max_tokens'],
                 temperature=recommendations_prompt_config['temperature']
             )
-            recommendations_text = recommendations_response.choices[0].message.content
-        else:
-            from .conversation_utils import run_thread_with_assistant
-            # Run assistant on the thread
-            run_thread_with_assistant(conversation.openai_thread_id, assistant_id)
             
-            # Get the latest assistant response
-            assistant_message = get_latest_assistant_message(conversation.openai_thread_id)
-            if assistant_message:
-                recommendations_text = assistant_message.content[0].text.value
+            if ai_response['success']:
+                ai_recommendations_text = ai_response['content']
             else:
-                recommendations_text = "No recommendations available from the conversation."
+                ai_recommendations_text = f"Recommendations unavailable: {ai_response['error']}"
         
-        duration_ms = int((time.time() - start_time) * 1000)
-        
-        # Update debug collector with response data
+        # Record the completion for debugging
         debug_collector.update_llm_call_response(
-            call_id=rec_call_id,
-            response_content=recommendations_text,
-            response_tokens=None,  # Token count not available from thread API
-            duration_ms=duration_ms
+            call_id,
+            response_content=str(ai_recommendations_text),
+            duration_ms=int((time.time() - start_time) * 1000)
         )
         
-        # Function to extract feedback section from recommendations text
-        def extract_feedback(text):
-            # Simple extraction method: look for 'FEEDBACK:' header and capture everything after it
-            feedback_match = re.search(r'(?i)(?:###\s*)?\bFEEDBACK:\b\s*(.*)', text, re.DOTALL)
-            if feedback_match:
-                # Get everything after the FEEDBACK: marker
-                raw_feedback = feedback_match.group(1).strip()
-                print(f"Found feedback section with {len(raw_feedback)} characters")
-                return raw_feedback
+    except Exception as error:
+        # Record the error for debugging
+        if call_id is not None:
+            debug_collector.update_llm_call_response(
+                call_id,
+                response_content=None,
+                error=str(error),
+                duration_ms=int((time.time() - start_time) * 1000)
+            )
+        ai_recommendations_text = f"Recommendations error: {str(error)}"
+    
+    # Function to extract feedback section from recommendations text
+    def extract_feedback(text):
+        # Simple extraction method: look for 'FEEDBACK:' header and capture everything after it
+        feedback_match = re.search(r'(?i)(?:###\s*)?\bFEEDBACK:\b\s*(.*)', text, re.DOTALL)
+        if feedback_match:
+            # Get everything after the FEEDBACK: marker
+            raw_feedback = feedback_match.group(1).strip()
+            feedback_text = raw_feedback
                 
-            # Fallback: look for content after the last recommendation
-            lines = text.split('\n')
-            last_recommendation_index = -1
-            
-            for i, line in enumerate(lines):
-                if line.strip().startswith('-') and ('ACTION:' in line or 'TICKER:' in line):
-                    last_recommendation_index = i
-            
-            if last_recommendation_index >= 0 and last_recommendation_index < len(lines) - 2:  # At least two lines after
-                # Skip one line after the last recommendation in case it's empty
-                potential_content = "\n".join(lines[last_recommendation_index + 2:]).strip()
-                if potential_content:
-                    print(f"Found content after recommendations: {len(potential_content)} characters")
-                    return potential_content
+        # Fallback: look for content after the last recommendation
+        lines = text.split('\n')
+        last_recommendation_index = -1
+        
+        for i, line in enumerate(lines):
+            if line.strip().startswith('-') and ('ACTION:' in line or 'TICKER:' in line):
+                last_recommendation_index = i
+        
+        if last_recommendation_index >= 0 and last_recommendation_index < len(lines) - 2:  # At least two lines after
+            # Skip one line after the last recommendation in case it's empty
+            potential_content = "\n".join(lines[last_recommendation_index + 2:]).strip()
+            if potential_content:
+                feedback_text = potential_content
                     
-            print("No feedback section found")
-            return ""
-        
-        # Initialize variables for recommendations, recurring investments, and feedback
-        structured_recommendations = []
-        recurrent_investments = []
-        feedback_text = ""  # Default empty feedback in case extraction fails
-        
-        if recommendations_text:
-            # Extract feedback section
-            feedback_text = extract_feedback(recommendations_text)
+        return feedback_text
+    
+    # Initialize variables for recommendations, recurring investments, and feedback
+    structured_recommendations = []
+    recurrent_investments = []
+    feedback_text = ""  # Default empty feedback in case extraction fails
+    
+    try:
+        if ai_recommendations_text:
+            feedback_text = extract_feedback(ai_recommendations_text)
             
             # Process recommendations (lines starting with dash)
             in_recurring_section = False
             
-            for raw_line in recommendations_text.split('\n'):
+            for raw_line in ai_recommendations_text.split('\n'):
                 line = raw_line.rstrip()
+                
                 # Detect section headers
                 if line.strip().lower().startswith('##'):
                     header_text = line.lower()
                     if 'recurring investment' in header_text:
                         in_recurring_section = True
-                        continue  # Skip header line itself
                     else:
-                        # If we encounter another header, exit recurring section
                         in_recurring_section = False
-                        continue
+                    continue  # Skip header line itself
                 
                 # Skip empty lines
                 if not line.strip():
@@ -645,7 +644,7 @@ def get_portfolio_recommendations(request):
                     # If we still don't have a ticker but have a symbol in the portfolio data, try to match
                     if not ticker and 'ACTION:' in line and 'QUANTITY:' in line:
                         for asset in portfolio_data:
-                            asset_symbol = asset.get('symbol', '')
+                            asset_symbol = asset.get('symbol')
                             # If this recommendation seems to match an existing asset
                             if asset_symbol and asset_symbol in line:
                                 ticker = asset_symbol
@@ -676,7 +675,12 @@ def get_portfolio_recommendations(request):
                         amount_cleaned = amount_raw.replace('$', '').replace(',', '')
                         try:
                             # Validate that it's a number
-                            amount_part = float(amount_cleaned)
+                            parsed_amount = float(amount_cleaned) if amount_cleaned else 0.0
+                            # For HOLD actions with 0 amount, return integer 0 instead of 0.0
+                            if action_part == 'HOLD' and parsed_amount == 0.0:
+                                amount_part = 0
+                            else:
+                                amount_part = parsed_amount
                         except ValueError:
                             # If not numeric, keep the original value for debugging
                             amount_part = amount_raw
@@ -699,7 +703,12 @@ def get_portfolio_recommendations(request):
                         amount_cleaned = amount_raw.replace('$', '').replace(',', '')
                         try:
                             # Validate that it's a number
-                            amount_part = float(amount_cleaned)
+                            parsed_amount = float(amount_cleaned) if amount_cleaned else 0.0
+                            # For HOLD actions with 0 amount, return integer 0 instead of 0.0
+                            if action_part == 'HOLD' and parsed_amount == 0.0:
+                                amount_part = 0
+                            else:
+                                amount_part = parsed_amount
                         except ValueError:
                             # If not numeric, keep the original value for debugging
                             amount_part = amount_raw
@@ -760,7 +769,7 @@ def get_portfolio_recommendations(request):
                 'action': 'UNKNOWN',
                 'amount': 'UNKNOWN',
                 'account': 'Default',
-                'comments': recommendations_text
+                'comments': ai_recommendations_text
             }]
         # Ensure recurrent_investments list exists even if parsing fails
         if not recurrent_investments:
@@ -795,21 +804,23 @@ def get_portfolio_recommendations(request):
                 except Exception:
                     pass
         
-    except Exception as e:
-        ai_recommendations = [{
+    except Exception as error:
+        structured_recommendations = [{
             'ticker': 'ERROR',
             'action': 'UNAVAILABLE',
             'amount': 'UNKNOWN',
             'account': 'Default',
-            'comments': f"Recommendations temporarily unavailable: {str(e)}"
+            'comments': f"Recommendations temporarily unavailable: {error}"
         }]
+        recurrent_investments = []
         feedback_text = "Unable to generate feedback due to an error."
         # Update debug collector with error
-        if 'rec_call_id' in locals():
+        if 'call_id' in locals():
             debug_collector.update_llm_call_response(
-                call_id=rec_call_id,
-                response_content="",
-                error=str(e)
+                call_id,
+                response_content=None,
+                error=str(error),
+                duration_ms=int((time.time() - start_time) * 1000)
             )
     
     # Compute asset flux metrics for response
@@ -960,7 +971,7 @@ def chat(request):
     # Append current user message
     messages.append({'role': 'user', 'content': message})
     # Prepare for LLM call
-    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+    client = AIRequestManager()
     # Record LLM call for debug
     model = assistant_id or os.getenv('OPENAI_MODEL', 'gpt-4o')
     prompt_type = 'chat_thread' if assistant_id else 'chat_direct_with_context'
@@ -976,26 +987,29 @@ def chat(request):
             assistant_msg = get_latest_assistant_message(conversation.openai_thread_id)
             content = assistant_msg.get('content') if assistant_msg else ''
         else:
-            resp = client.chat.completions.create(
-                model=model,
+            ai_response = client.make_request(
+                endpoint_type='chat',
                 messages=messages
             )
-            content = resp.choices[0].message.content
-            response_tokens = getattr(getattr(resp, 'usage', None), 'total_tokens', None)
+            
+            if ai_response['success']:
+                content = ai_response['content']
+            else:
+                content = f"Chat error: {ai_response['error']}"
+            response_tokens = None  # Not available from our abstraction layer
         duration = int((time.time() - start_time) * 1000)
         
         # Update debug call with response
         debug_collector.update_llm_call_response(
-            call_id=call_id,
-            response_content=content,
-            response_tokens=response_tokens,
+            call_id,
+            response_content=str(content),
             duration_ms=duration
         )
     except Exception as e:
         duration = int((time.time() - start_time) * 1000)
         debug_collector.update_llm_call_response(
-            call_id=call_id,
-            response_content='',
+            call_id,
+            response_content=None,
             error=str(e),
             duration_ms=duration
         )

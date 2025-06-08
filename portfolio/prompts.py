@@ -243,14 +243,20 @@ def format_portfolio_summary(portfolio_data: list, total_value: float,
     Returns:
         Formatted portfolio summary string
     """
+    # Ensure cash is numeric
+    try:
+        cash_value = float(cash) if cash else 0
+    except (ValueError, TypeError):
+        cash_value = 0
+    
     # Calculate total portfolio value including cash
-    total_portfolio_value = total_value + cash
+    total_portfolio_value = total_value + cash_value
     
     portfolio_summary = f"""
 Portfolio Summary:
 - Total Portfolio Value: ${total_portfolio_value:,.2f}
 - Investment Assets Value: ${total_value:,.2f}
-- Available Cash: ${cash:,.2f}
+- Available Cash: ${cash_value:,.2f}
 - Number of Assets: {asset_count}
 - Asset Types: {', '.join(asset_types) if asset_types else 'Not specified'}"""
 
