@@ -17,6 +17,7 @@ from datetime import datetime
 class LLMCall:
     """Represents a single LLM API call with debugging information."""
     model: str
+    provider: str  # OpenAI or Anthropic
     prompt_type: str
     messages: List[Dict[str, str]]
     max_tokens: int
@@ -43,6 +44,7 @@ class AIDebugCollector:
     def record_llm_call(
         self,
         model: str,
+        provider: str,
         prompt_type: str,
         messages: List[Dict[str, str]],
         max_tokens: int = 1000,
@@ -57,6 +59,7 @@ class AIDebugCollector:
             
         call = LLMCall(
             model=model,
+            provider=provider,
             prompt_type=prompt_type,
             messages=messages,
             max_tokens=max_tokens,
@@ -103,6 +106,7 @@ class AIDebugCollector:
             "llm_calls": [
                 {
                     "model": call.model,
+                    "provider": call.provider,
                     "prompt_type": call.prompt_type,
                     "timestamp": call.timestamp,
                     "config": {
@@ -122,6 +126,7 @@ class AIDebugCollector:
             "summary": {
                 "total_llm_calls": len(self.llm_calls),
                 "models_used": list(set(call.model for call in self.llm_calls)),
+                "providers_used": list(set(call.provider for call in self.llm_calls)),
                 "prompt_types": list(set(call.prompt_type for call in self.llm_calls)),
                 "total_llm_duration_ms": sum(
                     call.duration_ms for call in self.llm_calls 

@@ -225,16 +225,19 @@ def update_portfolio_with_live_prices(portfolio_data):
                     else:
                         updated_asset['type'] = 'Stock'  # Default fallback
                         
-                print(f"Updated {ticker_symbol} with live price: ${live_price}, type: {updated_asset['type']}")
+                if os.getenv('DEBUG', 'False').lower() == 'true':
+                    print(f"Updated {ticker_symbol} with live price: ${live_price}, type: {updated_asset['type']}")
             except Exception as e:
                 # If type derivation fails, use existing type or default to 'Stock'
                 if 'type' not in updated_asset:
                     updated_asset['type'] = 'Stock'
-                print(f"Could not derive type for {ticker_symbol}, using: {updated_asset['type']}")
+                if os.getenv('DEBUG', 'False').lower() == 'true':
+                    print(f"Could not derive type for {ticker_symbol}, using: {updated_asset['type']}")
                         
         except Exception as e:
             # If there's an error fetching the price, log it and keep the existing data
-            print(f"Error fetching data for {ticker_symbol}: {str(e)}")
+            if os.getenv('DEBUG', 'False').lower() == 'true':
+                print(f"Error fetching data for {ticker_symbol}: {str(e)}")
             # Ensure type exists even if fetching fails
             if 'type' not in updated_asset:
                 updated_asset['type'] = 'Stock'  # Default fallback
@@ -321,7 +324,8 @@ def analyze_portfolio(request):
     except Exception as e:
         # If conversation creation fails, create a fallback response object
         # This won't have conversation persistence but will allow the API to work
-        print(f"Error creating conversation: {str(e)}")
+        if os.getenv('DEBUG', 'False').lower() == 'true':
+            print(f"Error creating conversation: {str(e)}")
         conversation = type('obj', (object,), {'id': 'temp-' + str(uuid.uuid4())})
     
     # Step 1: Generate AI-powered analysis using conversation thread
@@ -337,10 +341,17 @@ def analyze_portfolio(request):
             'analysis'
         )
         
-        # Record the LLM call for debugging
+        # Record the LLM call for debugging using full prompt messages
         analysis_prompt_config = get_portfolio_analysis_prompt(portfolio_data, total_value, asset_count, asset_types, cash, investment_goals)
+        
+        # Get the provider for this endpoint
+        analysis_provider = AIRequestManager.get_analysis_provider()
+        provider_name = analysis_provider.get_provider_name()
+        model_name = analysis_provider.model if hasattr(analysis_provider, 'model') else 'unknown'
+        
         call_id = debug_collector.record_llm_call(
-            model="analysis_provider",
+            model=model_name,
+            provider=provider_name,
             prompt_type="portfolio_analysis",
             messages=analysis_prompt_config['messages']
         )
@@ -493,7 +504,8 @@ def get_portfolio_recommendations(request):
     except Exception as e:
         # If conversation creation fails, create a fallback response object
         # This won't have conversation persistence but will allow the API to work
-        print(f"Error creating conversation: {str(e)}")
+        if os.getenv('DEBUG', 'False').lower() == 'true':
+            print(f"Error creating conversation: {str(e)}")
         conversation = type('obj', (object,), {'id': 'temp-' + str(uuid.uuid4())})
     
     # Step 1: Generate AI-powered recommendations using conversation thread
@@ -520,8 +532,14 @@ def get_portfolio_recommendations(request):
             monthly_cash
         )
         
+        # Get the provider for this endpoint
+        recommendations_provider = AIRequestManager.get_recommendations_provider()
+        provider_name = recommendations_provider.get_provider_name()
+        model_name = recommendations_provider.model if hasattr(recommendations_provider, 'model') else 'unknown'
+        
         call_id = debug_collector.record_llm_call(
-            model="recommendations_provider",
+            model=model_name,
+            provider=provider_name,
             prompt_type="portfolio_recommendations",
             messages=recommendations_prompt_config['messages']
         )
@@ -973,19 +991,33 @@ def chat(request):
     # Prepare for LLM call
     client = AIRequestManager()
     # Record LLM call for debug
-    model = assistant_id or os.getenv('OPENAI_MODEL', 'gpt-4o')
-    prompt_type = 'chat_thread' if assistant_id else 'chat_direct_with_context'
+    assistant_id = os.getenv('OPENAI_ASSISTANT_ID', '')
+    
+    if assistant_id:
+        # Using OpenAI assistant
+        model = os.getenv('OPENAI_MODEL', 'gpt-4o')
+        provider_name = 'OpenAI'
+        prompt_type = 'chat_thread'
+    else:
+        # Using direct API call - get provider info
+        chat_provider = AIRequestManager.get_chat_provider()
+        provider_name = chat_provider.get_provider_name()
+        model = chat_provider.model if hasattr(chat_provider, 'model') else 'unknown'
+        prompt_type = 'chat_direct_with_context'
+    
     call_id = debug_collector.record_llm_call(
         model=model,
+        provider=provider_name,
         prompt_type=prompt_type,
         messages=messages
     )
-    start_time = time.time()
+    start_time = time.time()  # Initialize start_time for duration tracking
+    
     try:
         if assistant_id:
             run_thread_with_assistant(conversation.openai_thread_id, assistant_id)
-            assistant_msg = get_latest_assistant_message(conversation.openai_thread_id)
-            content = assistant_msg.get('content') if assistant_msg else ''
+            assistant_message = get_latest_assistant_message(conversation.openai_thread_id)
+            content = assistant_message.content[0].text.value if assistant_message else ''
         else:
             ai_response = client.make_request(
                 endpoint_type='chat',
@@ -1087,6 +1119,8 @@ def register_user(request):
         )
     except Exception as e:
         # Handle any other errors
+        if os.getenv('DEBUG', 'False').lower() == 'true':
+            print(f"Failed to create user: {str(e)}")
         return Response(
             {'error': f'Failed to create user: {str(e)}'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
