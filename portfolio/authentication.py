@@ -14,15 +14,20 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
     keyword = 'ApiKey'
     
     def authenticate(self, request):
-        auth = authentication.get_authorization_header(request).split()
+        # Changed from 'Authorization' to 'Authentication'
+        auth_header = request.headers.get('Authentication')
         
-        if not auth:
-            msg = _('Authorization header required.')
-            raise exceptions.AuthenticationFailed(msg)
+        if not auth_header:
+            # No Authentication header, allow other mechanisms or AllowAny
+            return None
+
+        # auth_header is already a string, no need for .decode('utf-8')
+        auth = auth_header.split()
         
-        if auth[0].lower() != self.keyword.lower().encode():
-            msg = _('Invalid authorization header.')
-            raise exceptions.AuthenticationFailed(msg)
+        if len(auth) == 0 or auth[0].lower() != self.keyword.lower():
+            # Header is present but not using the 'ApiKey' scheme, or empty.
+            # Let other authenticators handle it, or if none, permissions will decide.
+            return None
         
         if len(auth) == 1:
             msg = _('Invalid API key header. No credentials provided.')
@@ -31,11 +36,7 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
             msg = _('Invalid API key header. API key string should not contain spaces.')
             raise exceptions.AuthenticationFailed(msg)
         
-        try:
-            api_key = auth[1].decode()
-        except UnicodeError:
-            msg = _('Invalid API key header. API key string should not contain invalid characters.')
-            raise exceptions.AuthenticationFailed(msg)
+        api_key = auth[1]
         
         return self.authenticate_credentials(api_key)
     
