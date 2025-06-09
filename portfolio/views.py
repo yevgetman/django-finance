@@ -1,7 +1,8 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from .permissions import GlobalHardcodedAPIKeyPermission
 import yfinance as yf
 import concurrent.futures
 import os
@@ -947,7 +948,7 @@ def get_portfolio_recommendations(request):
     return Response(enhanced_response)
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([GlobalHardcodedAPIKeyPermission, IsAuthenticated])
 def chat(request):
     """
     Dedicated chat endpoint for follow-up on conversation threads.
@@ -1055,7 +1056,7 @@ def chat(request):
     return Response(enhanced)
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([GlobalHardcodedAPIKeyPermission, AllowAny])
 def register_user(request):
     """
     Register a new user and return their API key.
