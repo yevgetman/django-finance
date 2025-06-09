@@ -432,7 +432,53 @@ The application supports persistent conversations with the AI for both analysis 
 - The `.env` file is excluded from version control
 - Django's security features protect against common web vulnerabilities
 - Comprehensive AI debug mode captures full prompt messages (system + user) for all LLM calls
-- Debug information includes timing, token usage, and complete conversation context
+- Debug information includes timing, token usage, complete conversation context, and AI provider details
+- AI provider tracking shows which provider (OpenAI or Anthropic) was used for each request
+- Conditional debug logging based on `DEBUG` environment variable to keep production logs clean
+
+### AI Debug Mode
+
+When `AI_DEBUG=True` is set in your `.env` file, all API responses will include detailed debug information:
+
+```json
+{
+  "ai_debug": {
+    "enabled": true,
+    "total_request_duration_ms": 7581,
+    "llm_calls": [
+      {
+        "model": "claude-3-5-sonnet-20240620",
+        "provider": "Anthropic",
+        "prompt_type": "portfolio_recommendations",
+        "timestamp": "2025-06-08T13:45:30.123456",
+        "config": {
+          "max_tokens": 1000,
+          "temperature": 0.7
+        },
+        "response": {
+          "content_length": 2500,
+          "duration_ms": 3200
+        }
+      }
+    ],
+    "summary": {
+      "total_llm_calls": 1,
+      "models_used": ["claude-3-5-sonnet-20240620"],
+      "providers_used": ["Anthropic"],
+      "prompt_types": ["portfolio_recommendations"],
+      "total_llm_duration_ms": 3200,
+      "errors": []
+    }
+  }
+}
+```
+
+This debug information is invaluable for:
+- Tracking which AI provider was used for each request
+- Monitoring performance differences between providers
+- Debugging issues with specific models or providers
+- Analyzing prompt effectiveness and response quality
+- Optimizing token usage and request duration
 
 ## 📝 Project Structure
 

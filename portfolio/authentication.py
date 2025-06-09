@@ -16,8 +16,13 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
     def authenticate(self, request):
         auth = authentication.get_authorization_header(request).split()
         
-        if not auth or auth[0].lower() != self.keyword.lower().encode():
-            return None
+        if not auth:
+            msg = _('Authorization header required.')
+            raise exceptions.AuthenticationFailed(msg)
+        
+        if auth[0].lower() != self.keyword.lower().encode():
+            msg = _('Invalid authorization header.')
+            raise exceptions.AuthenticationFailed(msg)
         
         if len(auth) == 1:
             msg = _('Invalid API key header. No credentials provided.')

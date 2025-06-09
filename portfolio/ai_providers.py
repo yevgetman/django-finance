@@ -60,24 +60,34 @@ class AnthropicProvider(AIProvider):
         """Generate a chat completion using Anthropic API"""
         try:
             # Convert OpenAI format messages to Anthropic format
-            system_message = ""
-            user_messages = []
+            system_message = None
+            anthropic_messages = []
             
+            # First extract system message if present
             for message in messages:
                 if message["role"] == "system":
                     system_message = message["content"]
-                elif message["role"] == "user":
-                    user_messages.append({"role": "user", "content": message["content"]})
-                elif message["role"] == "assistant":
-                    user_messages.append({"role": "assistant", "content": message["content"]})
+                    break
             
-            # Create the request
+            # Then process user and assistant messages in order
+            for message in messages:
+                if message["role"] == "user":
+                    anthropic_messages.append({"role": "user", "content": message["content"]})
+                elif message["role"] == "assistant":
+                    anthropic_messages.append({"role": "assistant", "content": message["content"]})
+            
+            # Ensure we have at least one message in the list
+            if not anthropic_messages:
+                # If no messages were processed, add a default user message
+                anthropic_messages = [{"role": "user", "content": "Hello"}]
+            
+            # Create the request with proper parameters
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=max_tokens,
                 temperature=temperature,
-                system=system_message if system_message else None,
-                messages=user_messages
+                system=system_message,  # Will be None if no system message was found
+                messages=anthropic_messages
             )
             
             return response.content[0].text
