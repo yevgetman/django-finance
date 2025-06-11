@@ -4,9 +4,12 @@ Django Finance is a web application that provides intelligent financial portfoli
 
 ## 🌟 Features
 
-### 🔐 API Key Authentication
-- Secure API access using custom API key authentication
-- User accounts with unique API keys for each user
+### 🔐 Dual-Header Authentication System
+- **Two-tier authentication approach**:
+  - **Authorization header (required)**: Contains global API key for API access
+  - **Authentication header (optional)**: Contains user-specific API key for personalized features
+- Support for both authenticated and anonymous API access
+- User accounts with unique API keys for personalized experiences
 - No traditional login required - API key based access only
 - Management commands for creating users and managing API keys
 - Automatic tracking of last API access times
@@ -114,10 +117,21 @@ Django Finance is a web application that provides intelligent financial portfoli
 
 ## 📡 API Endpoints
 
-**Authentication Required:** All API endpoints require authentication using an API key in the Authorization header:
+**Authentication System:**
+
+All API endpoints require the **Authorization header** with a global API key:
 ```
-Authorization: ApiKey YOUR_API_KEY_HERE
+Authorization: ApiKey GLOBAL_API_KEY_HERE
 ```
+
+For personalized features and user-specific data, include the optional **Authentication header**:
+```
+Authentication: ApiKey USER_API_KEY_HERE
+```
+
+**Access Levels:**
+- **Anonymous access**: Only Authorization header required (global API key)
+- **Authenticated access**: Both Authorization and Authentication headers required
 
 ### User Registration
 
@@ -348,11 +362,15 @@ Example response:
 ```
 POST /api/chat/
 ```
-Dedicated endpoint for follow-up conversations and questions related to previous analysis or recommendations.
+Dedicated endpoint for follow-up conversations and questions related to previous analysis or recommendations. Supports both authenticated and anonymous users.
 
 **Parameters:**
 - `message`: The chat message or question (required)
 - `conversation_id`: UUID of the conversation to continue (optional)
+
+**Authentication Options:**
+- **Anonymous users**: Only Authorization header required (conversations not linked to user accounts)
+- **Authenticated users**: Both Authorization and Authentication headers required (conversations linked to user accounts)
 
 Example request:
 ```json
@@ -426,7 +444,18 @@ The application supports persistent conversations with the AI for both analysis 
 - Dedicated `chat` parameter allows users to provide conversational context or specific questions
 - Both analysis and recommendations endpoints support the `chat` parameter for consistent user experience
 
-## 🔒 Security and Debugging
+## 🔒 Security and Authentication
+
+### Authentication Flow
+- **Authorization header** (required): Contains global API key that grants access to the API itself
+- **Authentication header** (optional): Contains user-specific API key that links requests to user accounts
+- **Anonymous users**: Can access API with only the Authorization header
+- **Authenticated users**: Can access personalized features with both headers
+- **Error responses**:
+  - Missing Authorization header: 403 Forbidden
+  - Invalid Authentication header: 401 Unauthorized
+
+## 🔍 Debugging
 
 - API keys are stored in environment variables
 - The `.env` file is excluded from version control
@@ -510,14 +539,20 @@ This system makes it easy to add new AI-powered features by simply defining new 
 
 ## 🆕 Recent Updates
 
-### Automatic Asset Type Detection
+#### Authentication Enhancements
+- Added dual-header authentication system separating API access from user identification
+- Enabled anonymous API access with global API key (Authorization header only)
+- Updated database schema to support anonymous conversations
+- Maintained backward compatibility for authenticated users
+
+#### Automatic Asset Type Detection
 - **Deprecated manual `type` parameter** - asset types are now automatically derived from yfinance data
 - Supports detection of: ETF, Stock, Mutual Fund, Crypto, Index, Currency, and more
 - Fallback logic ensures all assets have a valid type classification
 - More accurate asset classification using real-time market data
 - Eliminates manual entry errors and keeps asset types up-to-date
 
-### Monthly Recurring Investment Recommendations
+#### Monthly Recurring Investment Recommendations
 - Added `monthly_cash` parameter to the recommendations endpoint for regular monthly contributions
 - New `recurrent_investements` response field containing AI-generated monthly allocation recommendations
 - Separate recurring investment logic that considers monthly cash flow for building positions over time
