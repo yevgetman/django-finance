@@ -4,3 +4,7 @@ openai>=1.0.0
 anthropic>=0.52.0
 python-dotenv>=1.0.0
 yfinance>=0.2.0
+gunicorn
+dj-database-url
+whitenoise
+mysqlclient
