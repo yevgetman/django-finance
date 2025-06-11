@@ -1055,7 +1055,7 @@ def chat(request):
     return Response(enhanced)
 
 @api_view(['POST'])
-@permission_classes([GlobalHardcodedAPIKeyPermission, AllowAny])
+@permission_classes([AllowAny])
 def register_user(request):
     """
     Register a new user and return their API key.
