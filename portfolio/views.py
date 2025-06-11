@@ -947,7 +947,7 @@ def get_portfolio_recommendations(request):
     return Response(enhanced_response)
 
 @api_view(['POST'])
-@permission_classes([GlobalHardcodedAPIKeyPermission, IsAuthenticated])
+@permission_classes([IsAuthenticated])
 def chat(request):
     """
     Dedicated chat endpoint for follow-up on conversation threads.
