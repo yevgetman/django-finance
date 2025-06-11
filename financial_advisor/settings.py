@@ -139,11 +139,12 @@ AUTH_USER_MODEL = 'portfolio.User'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'portfolio.authentication.APIKeyAuthentication',
+        'portfolio.authentication.AnonymousAPIAuthentication',  # Fallback for anonymous users
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
-        'portfolio.permissions.GlobalHardcodedAPIKeyPermission', # New global key check
-        'rest_framework.permissions.IsAuthenticated',
+        'portfolio.permissions.GlobalHardcodedAPIKeyPermission',  # Required Authorization header
+        'portfolio.permissions.IsAuthenticatedOrAnonymous',      # Allow both authenticated and anonymous
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10

@@ -22,3 +22,17 @@ class GlobalHardcodedAPIKeyPermission(permissions.BasePermission):
             return False
         
         return provided_key == expected_key
+
+
+class IsAuthenticatedOrAnonymous(permissions.BasePermission):
+    """
+    Custom permission that allows access to both authenticated users and anonymous users,
+    as long as they have passed the global API key check.
+    
+    This replaces the default IsAuthenticated permission to allow anonymous API access.
+    """
+    
+    def has_permission(self, request, view):
+        # Allow both authenticated users and anonymous users
+        # The global API key check is handled by GlobalHardcodedAPIKeyPermission
+        return True

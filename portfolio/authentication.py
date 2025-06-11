@@ -1,24 +1,29 @@
 from rest_framework import authentication
 from rest_framework import exceptions
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.utils.translation import gettext_lazy as _
 
 User = get_user_model()
 
 class APIKeyAuthentication(authentication.BaseAuthentication):
     """
-    Custom authentication class that authenticates users via API key in the Authorization header.
+    Custom authentication class that authenticates users via API key in the Authentication header.
     
-    Expected header format: Authorization: ApiKey <api_key>
+    Expected header format: Authentication: ApiKey <api_key>
+    
+    If no Authentication header is provided, the user will be treated as anonymous
+    but the request can still proceed if other permissions allow it.
     """
     keyword = 'ApiKey'
     
     def authenticate(self, request):
-        # Changed from 'Authorization' to 'Authentication'
+        # Check for Authentication header (optional for user identification)
         auth_header = request.headers.get('Authentication')
         
         if not auth_header:
-            # No Authentication header, allow other mechanisms or AllowAny
+            # No Authentication header - treat as anonymous user
+            # Return None to allow other authenticators or anonymous access
             return None
 
         # auth_header is already a string, no need for .decode('utf-8')
@@ -61,3 +66,15 @@ class APIKeyAuthentication(authentication.BaseAuthentication):
         authentication scheme should return `403 Permission Denied` responses.
         """
         return self.keyword
+
+
+class AnonymousAPIAuthentication(authentication.BaseAuthentication):
+    """
+    Authentication class that always returns an anonymous user.
+    This ensures that requests without Authentication headers are treated as anonymous
+    rather than unauthenticated, allowing them to pass through to permission checks.
+    """
+    
+    def authenticate(self, request):
+        # Always return anonymous user if no other authentication succeeded
+        return (AnonymousUser(), None)

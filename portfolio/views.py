@@ -2,7 +2,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from .permissions import GlobalHardcodedAPIKeyPermission
+from .permissions import GlobalHardcodedAPIKeyPermission, IsAuthenticatedOrAnonymous
 import yfinance as yf
 import concurrent.futures
 import os
@@ -948,7 +948,7 @@ def get_portfolio_recommendations(request):
     return Response(enhanced_response)
 
 @api_view(['POST'])
-@permission_classes([GlobalHardcodedAPIKeyPermission, IsAuthenticated])
+@permission_classes([GlobalHardcodedAPIKeyPermission, IsAuthenticatedOrAnonymous])
 def chat(request):
     """
     Dedicated chat endpoint for follow-up on conversation threads.
@@ -958,10 +958,14 @@ def chat(request):
     if not message:
         return Response({'error': 'Message is required'}, status=status.HTTP_400_BAD_REQUEST)
     conversation_id = request.data.get('conversation_id')
+    
+    # Handle anonymous users by passing None for user
+    user = request.user if request.user.is_authenticated else None
+    
     conversation, created = get_or_create_conversation(
         conversation_id=conversation_id,
         conversation_type='chat',
-        user=request.user
+        user=user
     )
     # Add user message to thread
     add_message_to_thread(conversation.openai_thread_id, message)
