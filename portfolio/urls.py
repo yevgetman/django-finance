@@ -7,4 +7,5 @@ urlpatterns = [
     path('chat/', views.chat, name='chat'),
     path('ticker-info/', views.get_ticker_info, name='ticker-info'),
     path('register/', views.register_user, name='register-user'),
+    path('delete-account/', views.delete_account, name='delete-account'),
 ]

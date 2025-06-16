@@ -16,6 +16,7 @@ import pandas as pd
 import re
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
+from .models import Conversation
 
 def get_ticker_data(ticker):
     """Helper function to get data for a single ticker"""
@@ -1134,3 +1135,35 @@ def register_user(request):
             {'error': f'Failed to create user: {str(e)}'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(['DELETE'])
+@permission_classes([GlobalHardcodedAPIKeyPermission, IsAuthenticated])
+def delete_account(request):
+    """Delete the authenticated user's account and all related conversations.
+
+    This endpoint requires no request body. It must include:
+    - Authorization header with the global API key.
+    - Authentication header in the form 'ApiKey <user_api_key>'.
+    """
+    user = request.user
+
+    # Verify the user is authenticated (not anonymous)
+    if user is None or user.is_anonymous:
+        return Response({'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    try:
+        user_id = user.id  # Preserve ID for response
+
+        # Delete associated conversations first (on_delete=CASCADE would handle this, but we do it explicitly for clarity)
+        Conversation.objects.filter(user=user).delete()
+
+        # Delete the user record
+        user.delete()
+
+        return Response({'user_id': str(user_id), 'message': 'Account deleted successfully'}, status=status.HTTP_200_OK)
+    except Exception as e:
+        if os.getenv('DEBUG', 'False').lower() == 'true':
+            print(f'Failed to delete user: {str(e)}')
+        return Response({'error': f'Failed to delete account: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
