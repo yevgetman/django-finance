@@ -308,10 +308,12 @@ def analyze_portfolio(request):
     
     # Get or create a conversation thread
     try:
+        # Handle anonymous users by passing None for user
+        user = request.user if request.user.is_authenticated else None
         conversation, created = get_or_create_conversation(
             conversation_id=conversation_id,
             conversation_type='analysis',
-            user=request.user
+            user=user
         )
         
         # Update the conversation with the latest portfolio data
@@ -488,10 +490,12 @@ def get_portfolio_recommendations(request):
     
     # Get or create a conversation thread
     try:
+        # Handle anonymous users by passing None for user
+        user = request.user if request.user.is_authenticated else None
         conversation, created = get_or_create_conversation(
             conversation_id=conversation_id,
             conversation_type='recommendations',
-            user=request.user
+            user=user
         )
         
         # Update the conversation with the latest portfolio data
