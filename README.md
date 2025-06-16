@@ -169,6 +169,26 @@ Example response:
 
 **Important:** Store the API key securely as it cannot be retrieved again. Use it in the Authorization header for all subsequent API requests.
 
+### Delete Account
+
+```
+DELETE /api/delete-account/
+```
+Removes the authenticated user account **and all associated conversations**.
+
+**Headers Required:**
+- `Authorization`: Global API key
+- `Authentication`: `ApiKey <user_api_key>`
+
+**Request Body:** _None_
+
+**Responses:**
+- `200 OK` – Account deleted successfully
+- `401 Unauthorized` – Missing or invalid user API key
+- `403 Forbidden` – Missing/invalid global Authorization header
+
+---
+
 ### Stock Information
 
 ```
