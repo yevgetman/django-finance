@@ -1,12 +1,13 @@
 """
-Conversation thread utilities for OpenAI API integration.
+Conversation thread utilities for AI provider integration.
 
 This module provides functions for creating and managing conversation threads
-with the OpenAI API for portfolio analysis and recommendations.
+with various AI providers (OpenAI and Anthropic) for portfolio analysis and recommendations.
 """
 
 from typing import Dict, Any, Optional, Tuple
 import os
+import uuid
 from openai import OpenAI
 from .models import Conversation
 
@@ -27,7 +28,6 @@ def get_or_create_conversation(
     Returns:
         Tuple of (Conversation object, boolean indicating if it was created)
     """
-    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
     created = False
     
     if conversation_id:
@@ -38,25 +38,40 @@ def get_or_create_conversation(
                 user=user,
                 is_active=True
             )
-            # Verify that the OpenAI thread still exists
-            try:
-                client.beta.threads.retrieve(conversation.openai_thread_id)
-                return conversation, created
-            except Exception:
-                # Thread doesn't exist anymore, create a new one
-                openai_thread = client.beta.threads.create()
-                conversation.openai_thread_id = openai_thread.id
-                conversation.save(update_fields=['openai_thread_id'])
+            # For OpenAI, verify that the thread still exists
+            chat_model = os.getenv('CHAT_MODEL', 'OPENAI')
+            if chat_model.upper() == 'OPENAI':
+                try:
+                    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+                    client.beta.threads.retrieve(conversation.thread_id)
+                    return conversation, created
+                except Exception:
+                    # Thread doesn't exist anymore, create a new one
+                    openai_thread = client.beta.threads.create()
+                    conversation.thread_id = openai_thread.id
+                    conversation.save(update_fields=['thread_id'])
+                    return conversation, created
+            else:
+                # For Anthropic, thread_id is just a UUID, no need to verify
                 return conversation, created
         except Conversation.DoesNotExist:
             # Invalid conversation ID, fall through to create a new one
             pass
     
     # Create a new conversation thread
-    openai_thread = client.beta.threads.create()
+    chat_model = os.getenv('CHAT_MODEL', 'OPENAI')
+    if chat_model.upper() == 'OPENAI':
+        # Create OpenAI thread
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        openai_thread = client.beta.threads.create()
+        thread_id = openai_thread.id
+    else:
+        # For Anthropic, generate a UUID-based thread ID
+        thread_id = f"anthropic_{uuid.uuid4().hex}"
+    
     conversation = Conversation.objects.create(
         user=user,
-        openai_thread_id=openai_thread.id,
+        thread_id=thread_id,
         conversation_type=conversation_type
     )
     created = True
@@ -69,22 +84,27 @@ def add_message_to_thread(
     content: str
 ) -> Dict[str, Any]:
     """
-    Add a message to an existing OpenAI thread.
+    Add a message to an existing thread.
     
     Args:
-        thread_id: OpenAI thread ID
+        thread_id: Thread ID
         content: Message content to add
         
     Returns:
         Created message data
     """
-    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-    message = client.beta.threads.messages.create(
-        thread_id=thread_id,
-        role="user",
-        content=content
-    )
-    return message
+    chat_model = os.getenv('CHAT_MODEL', 'OPENAI')
+    if chat_model.upper() == 'OPENAI':
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        message = client.beta.threads.messages.create(
+            thread_id=thread_id,
+            role="user",
+            content=content
+        )
+        return message
+    else:
+        # For Anthropic, implement message creation logic here
+        pass
 
 
 def run_thread_with_assistant(
@@ -96,40 +116,45 @@ def run_thread_with_assistant(
     Run an assistant on a thread and wait for completion.
     
     Args:
-        thread_id: OpenAI thread ID
-        assistant_id: OpenAI assistant ID
+        thread_id: Thread ID
+        assistant_id: Assistant ID
         max_wait_seconds: Maximum time to wait for completion
         
     Returns:
         Run data with status
     """
-    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-    
-    # Create a run
-    run = client.beta.threads.runs.create(
-        thread_id=thread_id,
-        assistant_id=assistant_id
-    )
-    
-    # Poll for completion (simplified version)
-    import time
-    start_time = time.time()
-    
-    while time.time() - start_time < max_wait_seconds:
-        run_status = client.beta.threads.runs.retrieve(
+    chat_model = os.getenv('CHAT_MODEL', 'OPENAI')
+    if chat_model.upper() == 'OPENAI':
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        
+        # Create a run
+        run = client.beta.threads.runs.create(
             thread_id=thread_id,
-            run_id=run.id
+            assistant_id=assistant_id
         )
         
-        if run_status.status == 'completed':
-            break
+        # Poll for completion (simplified version)
+        import time
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait_seconds:
+            run_status = client.beta.threads.runs.retrieve(
+                thread_id=thread_id,
+                run_id=run.id
+            )
             
-        if run_status.status in ['failed', 'cancelled', 'expired']:
-            raise Exception(f"Run failed with status: {run_status.status}")
-            
-        time.sleep(1)  # Wait before polling again
-    
-    return run_status
+            if run_status.status == 'completed':
+                break
+                
+            if run_status.status in ['failed', 'cancelled', 'expired']:
+                raise Exception(f"Run failed with status: {run_status.status}")
+                
+            time.sleep(1)  # Wait before polling again
+        
+        return run_status
+    else:
+        # For Anthropic, implement run logic here
+        pass
 
 
 def get_thread_messages(thread_id: str) -> list:
@@ -137,14 +162,19 @@ def get_thread_messages(thread_id: str) -> list:
     Get all messages from a thread.
     
     Args:
-        thread_id: OpenAI thread ID
+        thread_id: Thread ID
         
     Returns:
         List of messages
     """
-    client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-    messages = client.beta.threads.messages.list(thread_id=thread_id)
-    return messages.data
+    chat_model = os.getenv('CHAT_MODEL', 'OPENAI')
+    if chat_model.upper() == 'OPENAI':
+        client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        messages = client.beta.threads.messages.list(thread_id=thread_id)
+        return messages.data
+    else:
+        # For Anthropic, implement message retrieval logic here
+        pass
 
 
 def get_latest_assistant_message(thread_id: str) -> Optional[Dict[str, Any]]:
@@ -152,7 +182,7 @@ def get_latest_assistant_message(thread_id: str) -> Optional[Dict[str, Any]]:
     Get the most recent assistant message from a thread.
     
     Args:
-        thread_id: OpenAI thread ID
+        thread_id: Thread ID
         
     Returns:
         Latest assistant message or None

@@ -365,11 +365,11 @@ def analyze_portfolio(request):
         # Check if we should use OpenAI assistants or direct API
         assistant_id = os.getenv('OPENAI_ASSISTANT_ID', '')
         
-        if assistant_id and hasattr(conversation, 'openai_thread_id'):
+        if assistant_id and hasattr(conversation, 'thread_id'):
             # Use OpenAI assistants API (only works with OpenAI)
-            add_message_to_thread(conversation.openai_thread_id, message_content)
-            run_thread_with_assistant(conversation.openai_thread_id, assistant_id)
-            assistant_message = get_latest_assistant_message(conversation.openai_thread_id)
+            add_message_to_thread(conversation.thread_id, message_content)
+            run_thread_with_assistant(conversation.thread_id, assistant_id)
+            assistant_message = get_latest_assistant_message(conversation.thread_id)
             ai_analysis = assistant_message.content[0].text.value if assistant_message else "Analysis unavailable"
         else:
             # Use direct AI provider API (works with both OpenAI and Anthropic)
@@ -555,11 +555,11 @@ def get_portfolio_recommendations(request):
         # Check if we should use OpenAI assistants or direct API
         assistant_id = os.getenv('OPENAI_RECOMMENDATIONS_ASSISTANT_ID', '')
         
-        if assistant_id and hasattr(conversation, 'openai_thread_id'):
+        if assistant_id and hasattr(conversation, 'thread_id'):
             # Use OpenAI assistants API (only works with OpenAI)
-            add_message_to_thread(conversation.openai_thread_id, message_content)
-            run_thread_with_assistant(conversation.openai_thread_id, assistant_id)
-            assistant_message = get_latest_assistant_message(conversation.openai_thread_id)
+            add_message_to_thread(conversation.thread_id, message_content)
+            run_thread_with_assistant(conversation.thread_id, assistant_id)
+            assistant_message = get_latest_assistant_message(conversation.thread_id)
             ai_recommendations_text = assistant_message.content[0].text.value if assistant_message else "Recommendations unavailable"
         else:
             # Use direct AI provider API (works with both OpenAI and Anthropic)
@@ -973,13 +973,13 @@ def chat(request):
         user=user
     )
     # Add user message to thread
-    add_message_to_thread(conversation.openai_thread_id, message)
+    add_message_to_thread(conversation.thread_id, message)
     # Prepare for LLM call. If using direct chat.completions, include prior context.
     messages = []
     assistant_id = os.getenv('OPENAI_ASSISTANT_ID', '')
     if not assistant_id:
         try:
-            prev_msgs = get_thread_messages(conversation.openai_thread_id)
+            prev_msgs = get_thread_messages(conversation.thread_id)
             # prev_msgs are newest first; reverse to chronological order
             for m in reversed(prev_msgs):
                 try:
@@ -1025,8 +1025,8 @@ def chat(request):
     
     try:
         if assistant_id:
-            run_thread_with_assistant(conversation.openai_thread_id, assistant_id)
-            assistant_message = get_latest_assistant_message(conversation.openai_thread_id)
+            run_thread_with_assistant(conversation.thread_id, assistant_id)
+            assistant_message = get_latest_assistant_message(conversation.thread_id)
             content = assistant_message.content[0].text.value if assistant_message else ''
         else:
             ai_response = client.make_request(
@@ -1166,4 +1166,3 @@ def delete_account(request):
         if os.getenv('DEBUG', 'False').lower() == 'true':
             print(f'Failed to delete user: {str(e)}')
         return Response({'error': f'Failed to delete account: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-

@@ -44,12 +44,12 @@ class User(AbstractUser):
 
 class Conversation(models.Model):
     """
-    Model for storing conversation threads with the OpenAI API.
+    Model for storing conversation threads with AI providers.
     Each conversation represents a single thread of analysis or recommendations.
     """
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='conversations', null=True, blank=True)
-    openai_thread_id = models.CharField(max_length=255, unique=True)
+    thread_id = models.CharField(max_length=255, unique=True)
     conversation_type = models.CharField(
         max_length=20,
         choices=[

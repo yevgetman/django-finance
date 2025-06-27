@@ -27,7 +27,7 @@ Django Finance is a web application that provides intelligent financial portfoli
 - Performance insights and strengths/weaknesses identification
 - Personalized analysis based on investment goals
 - Cash allocation recommendations
-- All powered by OpenAI's GPT models
+- **Multi-provider AI support**: Choose between OpenAI GPT models and Anthropic Claude
 - Persistent conversation threads for continued context
 - Conversational input via dedicated chat parameter
 
@@ -49,14 +49,15 @@ Django Finance is a web application that provides intelligent financial portfoli
 ## 🔧 Technology Stack
 
 - **Backend**: Django and Django REST Framework
-- **AI**: OpenAI GPT models (configurable)
+- **AI**: Multi-provider support (OpenAI GPT models and Anthropic Claude)
 - **Financial Data**: Yahoo Finance API
 - **Environment Management**: python-dotenv
+- **Database**: SQLite (default) with generic conversation thread management
 
 ## 📋 Prerequisites
 
 - Python 3.8+
-- OpenAI API key
+- AI API key (OpenAI or Anthropic)
 - Basic understanding of investing concepts
 
 ## 🚀 Getting Started
@@ -84,12 +85,23 @@ Django Finance is a web application that provides intelligent financial portfoli
 
 1. Create a `.env` file in the project root with the following variables:
    ```
+   # AI Provider Configuration
    # OpenAI API Configuration
    OPENAI_API_KEY=your_openai_api_key_here
    OPENAI_MODEL=gpt-4o
    OPENAI_RECOMMENDATIONS_MODEL=gpt-4o
    
-   # OpenAI Assistants (optional)
+   # Anthropic API Configuration (optional - for Claude support)
+   # ANTHROPIC_API_KEY=your_anthropic_api_key_here
+   # ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
+   # ANTHROPIC_RECOMMENDATIONS_MODEL=claude-3-5-sonnet-20241022
+   
+   # AI Provider Selection (OPENAI or ANTHROPIC)
+   CHAT_MODEL=OPENAI
+   ANALYSIS_MODEL=OPENAI  
+   RECOMMENDATIONS_MODEL=OPENAI
+   
+   # OpenAI Assistants (optional - only works with OpenAI)
    # OPENAI_ASSISTANT_ID=your_analysis_assistant_id
    # OPENAI_RECOMMENDATIONS_ASSISTANT_ID=your_recommendations_assistant_id
 
@@ -99,7 +111,10 @@ Django Finance is a web application that provides intelligent financial portfoli
    AI_DEBUG=True  # Enable to include AI debug information in responses
    ```
 
-2. Replace `your_openai_api_key_here` with your actual OpenAI API key.
+2. **Choose your AI provider:**
+   - **OpenAI**: Set your OpenAI API key and keep provider settings as "OPENAI"
+   - **Anthropic**: Set your Anthropic API key and change provider settings to "ANTHROPIC"
+   - **Mixed**: You can use different providers for different endpoints (chat, analysis, recommendations)
 
 ### Running the Application
 
@@ -121,17 +136,19 @@ Django Finance is a web application that provides intelligent financial portfoli
 
 All API endpoints require the **Authorization header** with a global API key:
 ```
-Authorization: ApiKey GLOBAL_API_KEY_HERE
+Authorization: GLOBAL_API_KEY_HERE
 ```
 
 For personalized features and user-specific data, include the optional **Authentication header**:
 ```
-Authentication: ApiKey USER_API_KEY_HERE
+Authentication: USER_API_KEY_HERE
 ```
 
 **Access Levels:**
 - **Anonymous access**: Only Authorization header required (global API key)
 - **Authenticated access**: Both Authorization and Authentication headers required
+
+**Note**: The Authentication header format has been simplified and no longer requires the "ApiKey" prefix - just include the API key value directly.
 
 ### User Registration
 
@@ -178,7 +195,7 @@ Removes the authenticated user account **and all associated conversations**.
 
 **Headers Required:**
 - `Authorization`: Global API key
-- `Authentication`: `ApiKey <user_api_key>`
+- `Authentication`: `USER_API_KEY_HERE`
 
 **Request Body:** _None_
 
@@ -450,7 +467,7 @@ The AI integration uses a sophisticated prompt management system found in `portf
 - Structured prompt templates
 - Dynamic data injection
 - Configurable model parameters
-- Easy extension for new AI features
+- Easy extension for adding new AI features
 
 ### 🔄 Conversation Persistence and Context
 
@@ -559,8 +576,16 @@ This system makes it easy to add new AI-powered features by simply defining new 
 
 ## 🆕 Recent Updates
 
-#### Authentication Enhancements
-- Added dual-header authentication system separating API access from user identification
+#### Multi-Provider AI Support
+- **Added support for Anthropic Claude** alongside existing OpenAI integration
+- Configurable AI providers per endpoint (chat, analysis, recommendations)
+- Generic conversation thread management supporting both OpenAI and Anthropic
+- **Database model update**: Renamed `openai_thread_id` to `thread_id` for provider-neutral thread management
+- Provider-specific thread ID generation (OpenAI native threads, Anthropic UUID-based)
+
+#### Authentication System Enhancements
+- **Simplified Authentication header format** - no longer requires "ApiKey" prefix, just the API key value directly
+- Enhanced dual-header authentication system separating API access from user identification
 - Enabled anonymous API access with global API key (Authorization header only)
 - Updated database schema to support anonymous conversations
 - Maintained backward compatibility for authenticated users
