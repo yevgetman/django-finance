@@ -1144,7 +1144,7 @@ def delete_account(request):
 
     This endpoint requires no request body. It must include:
     - Authorization header with the global API key.
-    - Authentication header in the form 'ApiKey <user_api_key>'.
+    - Authentication header with the user API key (no prefix required).
     """
     user = request.user
 
