@@ -1,12 +1,15 @@
 # Django Finance: AI-Powered Portfolio Analysis
 
-Django Finance is a web application that provides intelligent financial portfolio analysis and recommendations using OpenAI's large language models. This application helps users gain insights into their investment portfolios and receive actionable recommendations to optimize their investments.
+Django Finance is a web application that provides intelligent financial portfolio analysis and recommendations using AI large language models (OpenAI GPT and Anthropic Claude). This application helps users gain insights into their investment portfolios and receive actionable recommendations to optimize their investments.
 
 ## 🌟 Features
 
-### 🔐 API Key Authentication
-- Secure API access using custom API key authentication
-- User accounts with unique API keys for each user
+### 🔐 Dual-Header Authentication System
+- **Two-tier authentication approach**:
+  - **Authorization header (required)**: Contains global API key for API access
+  - **Authentication header (optional)**: Contains user-specific API key for personalized features
+- Support for both authenticated and anonymous API access
+- User accounts with unique API keys for personalized experiences
 - No traditional login required - API key based access only
 - Management commands for creating users and managing API keys
 - Automatic tracking of last API access times
@@ -24,7 +27,7 @@ Django Finance is a web application that provides intelligent financial portfoli
 - Performance insights and strengths/weaknesses identification
 - Personalized analysis based on investment goals
 - Cash allocation recommendations
-- All powered by OpenAI's GPT models
+- **Multi-provider AI support**: Choose between OpenAI GPT models and Anthropic Claude
 - Persistent conversation threads for continued context
 - Conversational input via dedicated chat parameter
 
@@ -46,14 +49,15 @@ Django Finance is a web application that provides intelligent financial portfoli
 ## 🔧 Technology Stack
 
 - **Backend**: Django and Django REST Framework
-- **AI**: OpenAI GPT models (configurable)
+- **AI**: Multi-provider support (OpenAI GPT models and Anthropic Claude)
 - **Financial Data**: Yahoo Finance API
 - **Environment Management**: python-dotenv
+- **Database**: SQLite (default) with generic conversation thread management
 
 ## 📋 Prerequisites
 
 - Python 3.8+
-- OpenAI API key
+- AI API key (OpenAI or Anthropic)
 - Basic understanding of investing concepts
 
 ## 🚀 Getting Started
@@ -81,12 +85,23 @@ Django Finance is a web application that provides intelligent financial portfoli
 
 1. Create a `.env` file in the project root with the following variables:
    ```
+   # AI Provider Configuration
    # OpenAI API Configuration
    OPENAI_API_KEY=your_openai_api_key_here
    OPENAI_MODEL=gpt-4o
    OPENAI_RECOMMENDATIONS_MODEL=gpt-4o
    
-   # OpenAI Assistants (optional)
+   # Anthropic API Configuration (optional - for Claude support)
+   # ANTHROPIC_API_KEY=your_anthropic_api_key_here
+   # ANTHROPIC_MODEL=claude-3-5-sonnet-20240620
+   # ANTHROPIC_RECOMMENDATIONS_MODEL=claude-3-5-sonnet-20240620
+   
+   # AI Provider Selection (OPENAI or ANTHROPIC)
+   CHAT_MODEL=OPENAI
+   ANALYSIS_MODEL=OPENAI  
+   RECOMMENDATIONS_MODEL=OPENAI
+   
+   # OpenAI Assistants (optional - only works with OpenAI)
    # OPENAI_ASSISTANT_ID=your_analysis_assistant_id
    # OPENAI_RECOMMENDATIONS_ASSISTANT_ID=your_recommendations_assistant_id
 
@@ -94,9 +109,15 @@ Django Finance is a web application that provides intelligent financial portfoli
    DEBUG=True
    SECRET_KEY=your_secret_key_here
    AI_DEBUG=True  # Enable to include AI debug information in responses
+   
+   # Global API Key (required for all API access)
+   AUTH_API_KEY=your_global_api_key_here
    ```
 
-2. Replace `your_openai_api_key_here` with your actual OpenAI API key.
+2. **Choose your AI provider:**
+   - **OpenAI**: Set your OpenAI API key and keep provider settings as "OPENAI"
+   - **Anthropic**: Set your Anthropic API key and change provider settings to "ANTHROPIC"
+   - **Mixed**: You can use different providers for different endpoints (chat, analysis, recommendations)
 
 ### Running the Application
 
@@ -114,10 +135,23 @@ Django Finance is a web application that provides intelligent financial portfoli
 
 ## 📡 API Endpoints
 
-**Authentication Required:** All API endpoints require authentication using an API key in the Authorization header:
+**Authentication System:**
+
+All API endpoints require the **Authorization header** with a global API key:
 ```
-Authorization: ApiKey YOUR_API_KEY_HERE
+Authorization: GLOBAL_API_KEY_HERE
 ```
+
+For personalized features and user-specific data, include the optional **Authentication header**:
+```
+Authentication: USER_API_KEY_HERE
+```
+
+**Access Levels:**
+- **Anonymous access**: Only Authorization header required (global API key)
+- **Authenticated access**: Both Authorization and Authentication headers required
+
+**Note**: The Authentication header accepts the API key value directly without any prefix.
 
 ### User Registration
 
@@ -155,6 +189,26 @@ Example response:
 
 **Important:** Store the API key securely as it cannot be retrieved again. Use it in the Authorization header for all subsequent API requests.
 
+### Delete Account
+
+```
+DELETE /api/delete-account/
+```
+Removes the authenticated user account **and all associated conversations**.
+
+**Headers Required:**
+- `Authorization`: Global API key
+- `Authentication`: USER_API_KEY_HERE
+
+**Request Body:** _None_
+
+**Responses:**
+- `200 OK` – Account deleted successfully
+- `401 Unauthorized` – Missing or invalid user API key
+- `403 Forbidden` – Missing/invalid global Authorization header
+
+---
+
 ### Stock Information
 
 ```
@@ -180,7 +234,7 @@ Analyzes a portfolio and provides AI-powered insights (without recommendations).
 - `chat`: Conversational context or questions to include in the analysis (optional, default: empty string)
 - `conversation_id`: UUID for continuing a previous conversation (optional)
 
-**Asset requirements:** Each asset entry must include a `symbol` field and **either** `shares` **or** `value` (dollar amount). If you supply only one, the other will be calculated automatically based on the latest market price. You can optionally include an `account` field to specify which account the asset belongs to (e.g., "Trading", "IRA", "401k"). The `type` field is **automatically derived** from yfinance data and no longer needs to be specified.
+**Asset requirements:** Each asset entry must include a `symbol` field and **either** `shares` **or** `value` (dollar amount). If you supply only one, the other will be calculated automatically based on the latest market price. You can optionally include an `account` field to specify which account the asset belongs to (e.g., "Trading", "IRA", "401k"). The `type` field is **automatically derived** from yfinance data.
 
 Example request body:
 ```json
@@ -348,11 +402,15 @@ Example response:
 ```
 POST /api/chat/
 ```
-Dedicated endpoint for follow-up conversations and questions related to previous analysis or recommendations.
+Dedicated endpoint for follow-up conversations and questions related to previous analysis or recommendations. Supports both authenticated and anonymous users.
 
 **Parameters:**
 - `message`: The chat message or question (required)
 - `conversation_id`: UUID of the conversation to continue (optional)
+
+**Authentication Options:**
+- **Anonymous users**: Only Authorization header required (conversations not linked to user accounts)
+- **Authenticated users**: Both Authorization and Authentication headers required (conversations linked to user accounts)
 
 Example request:
 ```json
@@ -412,7 +470,7 @@ The AI integration uses a sophisticated prompt management system found in `portf
 - Structured prompt templates
 - Dynamic data injection
 - Configurable model parameters
-- Easy extension for new AI features
+- Easy extension for adding new AI features
 
 ### 🔄 Conversation Persistence and Context
 
@@ -426,7 +484,18 @@ The application supports persistent conversations with the AI for both analysis 
 - Dedicated `chat` parameter allows users to provide conversational context or specific questions
 - Both analysis and recommendations endpoints support the `chat` parameter for consistent user experience
 
-## 🔒 Security and Debugging
+## 🔒 Security and Authentication
+
+### Authentication Flow
+- **Authorization header** (required): Contains global API key that grants access to the API itself
+- **Authentication header** (optional): Contains user-specific API key that links requests to user accounts
+- **Anonymous users**: Can access API with only the Authorization header
+- **Authenticated users**: Can access personalized features with both headers
+- **Error responses**:
+  - Missing Authorization header: 403 Forbidden
+  - Invalid Authentication header: 401 Unauthorized
+
+## 🔍 Debugging
 
 - API keys are stored in environment variables
 - The `.env` file is excluded from version control
@@ -508,46 +577,6 @@ The application features a modular prompt management system that:
 
 This system makes it easy to add new AI-powered features by simply defining new prompt templates.
 
-## 🆕 Recent Updates
-
-### Automatic Asset Type Detection
-- **Deprecated manual `type` parameter** - asset types are now automatically derived from yfinance data
-- Supports detection of: ETF, Stock, Mutual Fund, Crypto, Index, Currency, and more
-- Fallback logic ensures all assets have a valid type classification
-- More accurate asset classification using real-time market data
-- Eliminates manual entry errors and keeps asset types up-to-date
-
-### Monthly Recurring Investment Recommendations
-- Added `monthly_cash` parameter to the recommendations endpoint for regular monthly contributions
-- New `recurrent_investements` response field containing AI-generated monthly allocation recommendations
-- Separate recurring investment logic that considers monthly cash flow for building positions over time
-- Monthly recommendations are BUY-only actions that align with investment goals and portfolio strategy
-- AI can recommend leaving some monthly cash uninvested or allocated to cash/treasuries when appropriate
-
-### Account-Based Portfolio Recommendations
-- Added support for account-specific investment recommendations (Trading, IRA, 401k, etc.)
-- Portfolio assets can now include an optional `account` field to specify which account they belong to
-- Recommendations are grouped by account in the response under a new `recommendations_by_account` key
-- Assets without an explicit account are assigned to a "Default" account
-- The AI considers account types when generating tailored investment advice
-
-### Enhanced Conversation Support
-- Added dedicated `/api/chat/` endpoint for follow-up conversations
-- Persistent conversation threads across analysis, recommendations, and chat endpoints
-- Improved context retention for more coherent multi-turn interactions
-- Support for conversational questions via the `chat` parameter in all endpoints
-
-### Terminology Improvements
-- Changed response field from `quantity` to `amount` to clearly indicate dollar values rather than share quantities
-- Changed response field from `reason` to `comments` for more intuitive terminology
-- Added `[NEW ASSET]` prefix to comments for new investment recommendations for clearer differentiation
-
-### Response Format Enhancements
-- Converted the `amount` field from string to numeric (float) type
-- Improved parsing logic to properly separate amount values from comments
-- Maintained backward compatibility with legacy field names during transition
-- Enhanced feedback section with more detailed strategic explanations
-
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
@@ -559,5 +588,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## 🙏 Acknowledgements
 
 - [OpenAI](https://openai.com/) for providing the AI models
+- [Anthropic](https://www.anthropic.com/) for providing Claude AI models  
 - [Yahoo Finance API](https://pypi.org/project/yfinance/) for financial data
 - [Django](https://www.djangoproject.com/) for the web framework

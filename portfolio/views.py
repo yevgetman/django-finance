@@ -2,6 +2,7 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from .permissions import GlobalHardcodedAPIKeyPermission, IsAuthenticatedOrAnonymous
 import yfinance as yf
 import concurrent.futures
 import os
@@ -15,6 +16,7 @@ import pandas as pd
 import re
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError
+from .models import Conversation
 
 def get_ticker_data(ticker):
     """Helper function to get data for a single ticker"""
@@ -307,10 +309,12 @@ def analyze_portfolio(request):
     
     # Get or create a conversation thread
     try:
+        # Handle anonymous users by passing None for user
+        user = request.user if request.user.is_authenticated else None
         conversation, created = get_or_create_conversation(
             conversation_id=conversation_id,
             conversation_type='analysis',
-            user=request.user
+            user=user
         )
         
         # Update the conversation with the latest portfolio data
@@ -361,11 +365,11 @@ def analyze_portfolio(request):
         # Check if we should use OpenAI assistants or direct API
         assistant_id = os.getenv('OPENAI_ASSISTANT_ID', '')
         
-        if assistant_id and hasattr(conversation, 'openai_thread_id'):
+        if assistant_id and hasattr(conversation, 'thread_id'):
             # Use OpenAI assistants API (only works with OpenAI)
-            add_message_to_thread(conversation.openai_thread_id, message_content)
-            run_thread_with_assistant(conversation.openai_thread_id, assistant_id)
-            assistant_message = get_latest_assistant_message(conversation.openai_thread_id)
+            add_message_to_thread(conversation.thread_id, message_content)
+            run_thread_with_assistant(conversation.thread_id, assistant_id)
+            assistant_message = get_latest_assistant_message(conversation.thread_id)
             ai_analysis = assistant_message.content[0].text.value if assistant_message else "Analysis unavailable"
         else:
             # Use direct AI provider API (works with both OpenAI and Anthropic)
@@ -487,10 +491,12 @@ def get_portfolio_recommendations(request):
     
     # Get or create a conversation thread
     try:
+        # Handle anonymous users by passing None for user
+        user = request.user if request.user.is_authenticated else None
         conversation, created = get_or_create_conversation(
             conversation_id=conversation_id,
             conversation_type='recommendations',
-            user=request.user
+            user=user
         )
         
         # Update the conversation with the latest portfolio data
@@ -549,11 +555,11 @@ def get_portfolio_recommendations(request):
         # Check if we should use OpenAI assistants or direct API
         assistant_id = os.getenv('OPENAI_RECOMMENDATIONS_ASSISTANT_ID', '')
         
-        if assistant_id and hasattr(conversation, 'openai_thread_id'):
+        if assistant_id and hasattr(conversation, 'thread_id'):
             # Use OpenAI assistants API (only works with OpenAI)
-            add_message_to_thread(conversation.openai_thread_id, message_content)
-            run_thread_with_assistant(conversation.openai_thread_id, assistant_id)
-            assistant_message = get_latest_assistant_message(conversation.openai_thread_id)
+            add_message_to_thread(conversation.thread_id, message_content)
+            run_thread_with_assistant(conversation.thread_id, assistant_id)
+            assistant_message = get_latest_assistant_message(conversation.thread_id)
             ai_recommendations_text = assistant_message.content[0].text.value if assistant_message else "Recommendations unavailable"
         else:
             # Use direct AI provider API (works with both OpenAI and Anthropic)
@@ -957,19 +963,23 @@ def chat(request):
     if not message:
         return Response({'error': 'Message is required'}, status=status.HTTP_400_BAD_REQUEST)
     conversation_id = request.data.get('conversation_id')
+    
+    # Handle anonymous users by passing None for user
+    user = request.user if request.user.is_authenticated else None
+    
     conversation, created = get_or_create_conversation(
         conversation_id=conversation_id,
         conversation_type='chat',
-        user=request.user
+        user=user
     )
     # Add user message to thread
-    add_message_to_thread(conversation.openai_thread_id, message)
+    add_message_to_thread(conversation.thread_id, message)
     # Prepare for LLM call. If using direct chat.completions, include prior context.
     messages = []
     assistant_id = os.getenv('OPENAI_ASSISTANT_ID', '')
     if not assistant_id:
         try:
-            prev_msgs = get_thread_messages(conversation.openai_thread_id)
+            prev_msgs = get_thread_messages(conversation.thread_id)
             # prev_msgs are newest first; reverse to chronological order
             for m in reversed(prev_msgs):
                 try:
@@ -1015,8 +1025,8 @@ def chat(request):
     
     try:
         if assistant_id:
-            run_thread_with_assistant(conversation.openai_thread_id, assistant_id)
-            assistant_message = get_latest_assistant_message(conversation.openai_thread_id)
+            run_thread_with_assistant(conversation.thread_id, assistant_id)
+            assistant_message = get_latest_assistant_message(conversation.thread_id)
             content = assistant_message.content[0].text.value if assistant_message else ''
         else:
             ai_response = client.make_request(
@@ -1125,3 +1135,34 @@ def register_user(request):
             {'error': f'Failed to create user: {str(e)}'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_account(request):
+    """Delete the authenticated user's account and all related conversations.
+
+    This endpoint requires no request body. It must include:
+    - Authorization header with the global API key.
+    - Authentication header with the user API key (no prefix required).
+    """
+    user = request.user
+
+    # Verify the user is authenticated (not anonymous)
+    if user is None or user.is_anonymous:
+        return Response({'error': 'Authentication required'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    try:
+        user_id = user.id  # Preserve ID for response
+
+        # Delete associated conversations first (on_delete=CASCADE would handle this, but we do it explicitly for clarity)
+        Conversation.objects.filter(user=user).delete()
+
+        # Delete the user record
+        user.delete()
+
+        return Response({'user_id': str(user_id), 'message': 'Account deleted successfully'}, status=status.HTTP_200_OK)
+    except Exception as e:
+        if os.getenv('DEBUG', 'False').lower() == 'true':
+            print(f'Failed to delete user: {str(e)}')
+        return Response({'error': f'Failed to delete account: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
