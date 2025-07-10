@@ -30,7 +30,7 @@ SECRET_KEY = os.getenv('SECRET_KEY', "django-insecure-__&w3%k1!*v5o^0)v9ua!0kqzo
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') if os.getenv('ALLOWED_HOSTS') else []
 
 
 # Application definition
@@ -82,11 +82,11 @@ WSGI_APPLICATION = "financial_advisor.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.mysql",
-        "NAME": "financial_advisor",
-        "USER": "root",
-        "PASSWORD": "root1234",
-        "HOST": "127.0.0.1",
-        "PORT": "3306",
+        "NAME": os.getenv('DB_NAME', 'financial_advisor'),
+        "USER": os.getenv('DB_USER', 'root'),
+        "PASSWORD": os.getenv('DB_PASSWORD', ''),
+        "HOST": os.getenv('DB_HOST', '127.0.0.1'),
+        "PORT": os.getenv('DB_PORT', '3306'),
     }
 }
 

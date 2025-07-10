@@ -83,7 +83,14 @@ Django Finance is a web application that provides intelligent financial portfoli
 
 ### Configuration
 
-1. Create a `.env` file in the project root with the following variables:
+⚠️ **SECURITY WARNING**: Never commit your `.env` file or expose your API keys. Use the `.env.example` as a template.
+
+1. Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edit `.env` and add your actual API keys and configuration:
    ```
    # AI Provider Configuration
    # OpenAI API Configuration
@@ -576,6 +583,38 @@ The application features a modular prompt management system that:
 5. Incorporates conversational context from user chat input
 
 This system makes it easy to add new AI-powered features by simply defining new prompt templates.
+
+## 🔒 Security Considerations
+
+### Environment Variables
+- **Never commit your `.env` file** - it contains sensitive API keys
+- Use `.env.example` as a template for required environment variables
+- Rotate API keys regularly and monitor usage
+- Set `DEBUG=False` in production environments
+
+### API Key Management
+- Store API keys securely (use environment variables or key management services)
+- Use separate API keys for development, staging, and production
+- Monitor API usage for unusual activity
+- Implement rate limiting and usage monitoring
+
+### Database Security
+- Use strong database passwords
+- Enable database SSL/TLS connections in production
+- Regularly backup your database
+- Consider database encryption at rest
+
+### Production Deployment
+- Set proper `ALLOWED_HOSTS` configuration
+- Use HTTPS in production
+- Implement proper logging and monitoring
+- Regular security updates for dependencies
+
+### API Security
+- The application uses API key authentication - treat these keys like passwords
+- Implement proper user access controls
+- Monitor API usage patterns
+- Consider implementing request rate limiting
 
 ## 🤝 Contributing
 
