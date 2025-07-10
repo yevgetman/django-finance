@@ -84,17 +84,7 @@ Integration-style tests using REST Framework’s `APIClient`.
 Both are marked with `@pytest.mark.django_db` so database access is automatically managed by pytest-django.
 
 ---
-## 4  CI Workflow (GitHub Actions)
-File: `.github/workflows/ci.yml`
-
-* Spins up MySQL 8 in a service container.
-* Installs prod + dev requirements.
-* Executes `pytest --cov=.` with coverage reporting.
-
-Note: pushing workflows requires a PAT with `workflow` scope.
-
----
-## 5  Running Tests Locally
+## 4  Running Tests Locally
 
 ```bash
 # 1. Activate venv (recommended)
